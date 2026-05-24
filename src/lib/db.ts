@@ -35,6 +35,8 @@ export const db = {
     ollamaUrl: 'http://localhost:11434',
     ollamaModel: 'llama3',
     claudeApiKey: '',
+    lazurosUrl: '',
+    lazurosToken: '',
     aiProvider: 'none',
     theme: 'dark',
   }),

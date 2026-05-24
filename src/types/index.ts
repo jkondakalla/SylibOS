@@ -60,8 +60,10 @@ export interface AppSettings {
   ollamaUrl: string
   ollamaModel: string
   claudeApiKey: string
-  aiProvider: 'ollama' | 'claude' | 'none'
+  lazurosUrl: string
+  lazurosToken: string
+  aiProvider: 'lazuros' | 'ollama' | 'claude' | 'none'
   theme: 'dark' | 'light'
 }
 
-export type AIProvider = 'ollama' | 'claude' | 'none'
+export type AIProvider = 'lazuros' | 'ollama' | 'claude' | 'none'

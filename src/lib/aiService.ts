@@ -78,6 +78,31 @@ async function orgViaOllama(
   return JSON.parse(data.response) as CourseStructure
 }
 
+async function orgViaLazuros(
+  url: string,
+  token: string,
+  model: string,
+  pagesContext: string,
+  pdfFiles: string[],
+): Promise<CourseStructure> {
+  const res = await fetch(`${url}/api/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      model,
+      prompt: ORG_PROMPT(pagesContext, pdfFiles),
+      stream: false,
+      format: 'json',
+    }),
+  })
+  if (!res.ok) throw new Error(`LazurOS error: ${res.status}`)
+  const data = (await res.json()) as { response: string }
+  return JSON.parse(data.response) as CourseStructure
+}
+
 async function orgViaClaude(
   apiKey: string,
   pagesContext: string,
@@ -100,6 +125,13 @@ export async function organizeCourse(
   pdfFiles: string[],
   settings: AppSettings,
 ): Promise<CourseStructure> {
+  if (settings.aiProvider === 'lazuros' && settings.lazurosUrl) {
+    try {
+      return await orgViaLazuros(settings.lazurosUrl, settings.lazurosToken, settings.ollamaModel, pagesContext, pdfFiles)
+    } catch {
+      // fall through to mock
+    }
+  }
   if (settings.aiProvider === 'ollama') {
     try {
       return await orgViaOllama(settings.ollamaUrl, settings.ollamaModel, pagesContext, pdfFiles)
@@ -178,6 +210,31 @@ async function callOllama(
   return JSON.parse(data.response) as LessonContent
 }
 
+async function callLazuros(
+  lazurosUrl: string,
+  token: string,
+  model: string,
+  title: string,
+  content: string,
+): Promise<LessonContent> {
+  const response = await fetch(`${lazurosUrl}/api/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      model,
+      prompt: LESSON_PROMPT(title, content),
+      stream: false,
+      format: 'json',
+    }),
+  })
+  if (!response.ok) throw new Error(`LazurOS error: ${response.status}`)
+  const data = (await response.json()) as { response: string }
+  return JSON.parse(data.response) as LessonContent
+}
+
 async function callClaude(
   apiKey: string,
   title: string,
@@ -241,6 +298,9 @@ export async function generateLessonContent(
   lectureTitle: string,
   lectureContent: string,
 ): Promise<LessonContent> {
+  if (settings.aiProvider === 'lazuros' && settings.lazurosUrl) {
+    return callLazuros(settings.lazurosUrl, settings.lazurosToken, settings.ollamaModel, lectureTitle, lectureContent)
+  }
   if (settings.aiProvider === 'ollama') {
     return callOllama(settings.ollamaUrl, settings.ollamaModel, lectureTitle, lectureContent)
   }
