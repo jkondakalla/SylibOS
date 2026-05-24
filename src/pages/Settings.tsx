@@ -45,7 +45,7 @@ export default function Settings() {
         <p style={{ margin: '0 0 16px', fontSize: 12, color: '#6b7280' }}>Used to generate quizzes and tasks from lecture content</p>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          {(['none', 'ollama', 'claude'] as AIProvider[]).map(p => (
+          {(['none', 'lazuros', 'ollama', 'claude'] as AIProvider[]).map(p => (
             <button
               key={p}
               onClick={() => set('aiProvider', p)}
@@ -57,10 +57,42 @@ export default function Settings() {
                 transition: 'all 0.15s',
               }}
             >
-              {p === 'none' ? 'None' : p === 'ollama' ? 'Ollama' : 'Claude API'}
+              {p === 'none' ? 'None' : p === 'lazuros' ? 'LazurOS' : p === 'ollama' ? 'Ollama' : 'Claude API'}
             </button>
           ))}
         </div>
+
+        {settings.aiProvider === 'lazuros' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>LazurOS URL</label>
+              <input
+                type="text" value={settings.lazurosUrl}
+                onChange={e => set('lazurosUrl', e.target.value)}
+                placeholder="https://your-hub.domain/api/lazuros"
+                style={{ width: '100%', background: '#0f0f13', border: '1px solid #2a2a35', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: '#e8e8ee', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>API token</label>
+              <input
+                type="password" value={settings.lazurosToken}
+                onChange={e => set('lazurosToken', e.target.value)}
+                placeholder="Generate in ORDECK Settings → API Tokens"
+                style={{ width: '100%', background: '#0f0f13', border: '1px solid #2a2a35', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: '#e8e8ee', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 6 }}>Model</label>
+              <input
+                type="text" value={settings.ollamaModel}
+                onChange={e => set('ollamaModel', e.target.value)}
+                placeholder="llama3.2"
+                style={{ width: '100%', background: '#0f0f13', border: '1px solid #2a2a35', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: '#e8e8ee', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
+        )}
 
         {settings.aiProvider === 'ollama' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
