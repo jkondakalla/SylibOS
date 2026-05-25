@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
 
@@ -8,7 +9,9 @@ const navLinks = [
 ]
 
 export default function Layout() {
-  const { segments } = useAppStore()
+  const { segments, hydrate } = useAppStore()
+
+  useEffect(() => { hydrate() }, [])
   const total = Object.keys(segments).length
   const done = Object.values(segments).filter(s => s.completedAt).length
 

@@ -39,8 +39,7 @@ type UnitGroup = {
 }
 
 export default function Home() {
-  const { courses, segments, dailyLogs, settings, hydrate } = useAppStore()
-  useEffect(() => { hydrate() }, [hydrate])
+  const { courses, segments, dailyLogs, settings } = useAppStore()
 
   const { done, goal } = getTodayProgress(dailyLogs, settings.dailyGoal)
   const streak = getStreak(dailyLogs, settings.dailyGoal)
@@ -49,10 +48,10 @@ export default function Home() {
   const [activeUnitName, setActiveUnitName] = useState<string>('')
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
 
-  // Default to most-recently-imported course
+  // Default to most-recently-imported course (store keeps courses sorted DESC)
   useEffect(() => {
     if (courses.length > 0 && !activeCourseId) {
-      setActiveCourseId(courses[courses.length - 1].id)
+      setActiveCourseId(courses[0].id)
     }
   }, [courses, activeCourseId])
 

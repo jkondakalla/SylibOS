@@ -60,6 +60,7 @@ export default function Import() {
         }
       }
 
+      setGenStatus(null)
       navigate(`/course/${course.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse ZIP file.')

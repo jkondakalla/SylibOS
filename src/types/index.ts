@@ -64,6 +64,8 @@ export interface AppSettings {
   lazurosToken: string
   aiProvider: 'lazuros' | 'ollama' | 'claude' | 'none'
   theme: 'dark' | 'light'
+  backendUrl: string
+  backendToken: string
 }
 
 export type AIProvider = 'lazuros' | 'ollama' | 'claude' | 'none'
