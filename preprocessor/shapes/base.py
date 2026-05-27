@@ -30,7 +30,8 @@ def link_resources_to_sessions(
     resources: list[ResourceNode],
 ) -> list[ResourceNode]:
     """
-    Two-pass linker. Mutates unit.sessions[*].resources in place.
+    Two-pass fuzzy linker (slug + title similarity).
+    Mutates unit.sessions[*].resources in place.
     Returns the list of resources that had no good match.
     """
     flat = [
@@ -47,10 +48,7 @@ def link_resources_to_sessions(
         # Pass 1 — slug similarity
         for ui, si, sess in flat:
             score = _slug_sim(resource.slug, sess.slug)
-            # Boost when session slug is a clear prefix of the resource slug
-            if resource.slug.startswith(sess.slug) or (
-                sess.slug.startswith(resource.slug.split("-")[0])
-            ):
+            if resource.slug.startswith(sess.slug):
                 score = max(score, 0.7)
             if score > best_score:
                 best_score = score
@@ -73,6 +71,37 @@ def link_resources_to_sessions(
     return unlinked
 
 
+def link_resources_uid_first(
+    units: list[UnitNode],
+    resources: list[ResourceNode],
+) -> list[ResourceNode]:
+    """
+    UID-first linker for modern OCW courses.
+
+    Uses resource.parent_uid → session.page_uid for exact matching, then
+    falls back to slug/title similarity for resources without a parent_uid
+    or whose parent_uid doesn't match any known session.
+    """
+    uid_to_pos: dict[str, tuple[int, int]] = {}
+    for ui, unit in enumerate(units):
+        for si, sess in enumerate(unit.sessions):
+            if sess.page_uid:
+                uid_to_pos[sess.page_uid] = (ui, si)
+
+    if not uid_to_pos:
+        return link_resources_to_sessions(units, resources)
+
+    unmatched: list[ResourceNode] = []
+    for resource in resources:
+        if resource.parent_uid and resource.parent_uid in uid_to_pos:
+            ui, si = uid_to_pos[resource.parent_uid]
+            units[ui].sessions[si].resources.append(resource)
+        else:
+            unmatched.append(resource)
+
+    return link_resources_to_sessions(units, unmatched)
+
+
 class SpineBuilder(ABC):
     def __init__(self, zip_root: Path, adapter):
         self.zip_root = zip_root
@@ -88,4 +117,4 @@ class SpineBuilder(ABC):
         resources: list[ResourceNode],
     ) -> list[ResourceNode]:
         """Attach resources to sessions. Returns unlinked remainder."""
-        return link_resources_to_sessions(units, resources)
+        return link_resources_uid_first(units, resources)

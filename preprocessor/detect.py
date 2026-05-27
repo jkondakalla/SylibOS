@@ -89,28 +89,37 @@ def detect_shape(
     if len(project_slugs) == 1:
         return "project_lab", 0.7
 
-    # 2. Scholar: unit dirs with multiple session sub-dirs AND no feature folder names
+    # 2. Scholar: unit dirs with session sub-dirs AND no feature folder names.
+    #    Primary signal: ≥2 sub-sessions (strong).  Secondary: ≥1 sub-session
+    #    across multiple dirs (weak — catches single-reading-per-unit courses).
     has_feature = bool(top_slugs & _FEATURE_SLUGS)
-    scholar_hits = 0
+    scholar_hits  = 0  # units with ≥2 sessions
+    loose_hits    = 0  # units with ≥1 session
     for d in top_dirs:
         sub_with_data = [
             s for s in d.iterdir()
             if s.is_dir() and not s.name.startswith(".") and (s / "data.json").exists()
         ]
-        if len(sub_with_data) >= 2:
+        n = len(sub_with_data)
+        if n >= 2:
             scholar_hits += 1
+            loose_hits   += 1
+        elif n == 1:
+            loose_hits += 1
 
     if scholar_hits >= 2 and not has_feature:
         return "scholar", 0.9
     if scholar_hits >= 1 and not has_feature:
         return "scholar", 0.7
+    if loose_hits >= 3 and not has_feature:
+        return "scholar", 0.6
 
     # 3. Video-only
     data_json = zip_root / "data.json"
     if data_json.exists():
         try:
-            data  = json.loads(data_json.read_text())
-            types = set(data.get("learning_resource_types", []))
+            data  = json.loads(data_json.read_text(errors="replace"))
+            types = set(data.get("learning_resource_types") or [])
             if "Lecture Videos" in types and not types & {"Lecture Notes", "Problem Sets"}:
                 return "video_only", 0.85
         except Exception:

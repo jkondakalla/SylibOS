@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .._utils import html_to_text, read_json
+from .._utils import enrich_overview, html_to_text, read_json, str_field
 from ..manifest import SessionNode, UnitNode
 from .base import SpineBuilder
 
@@ -46,6 +46,9 @@ class ScholarBuilder(SpineBuilder):
             except ValueError:
                 continue
 
+            if unit_data.get("deleted"):
+                continue
+
             sessions: list[SessionNode] = []
             sess_idx = 0
             for session_dir in sorted(
@@ -60,12 +63,16 @@ class ScholarBuilder(SpineBuilder):
                 except ValueError:
                     continue
 
+                if sess_data.get("deleted"):
+                    continue
+
                 sessions.append(SessionNode(
                     slug=session_dir.name,
-                    title=sess_data.get("title", session_dir.name),
-                    overview=html_to_text(sess_data.get("content", "")),
+                    title=str_field(sess_data, "title", session_dir.name),
+                    overview=enrich_overview(html_to_text(sess_data.get("content")), sess_data),
                     is_assessment=bool(_ASSESSMENT_PAT.search(session_dir.name)),
                     order=sess_idx,
+                    page_uid=sess_data.get("uid") or sess_data.get("id"),
                 ))
                 sess_idx += 1
 
@@ -74,8 +81,8 @@ class ScholarBuilder(SpineBuilder):
 
             units.append(UnitNode(
                 slug=unit_dir.name,
-                title=unit_data.get("title", unit_dir.name),
-                overview=html_to_text(unit_data.get("content", "")),
+                title=str_field(unit_data, "title", unit_dir.name),
+                overview=html_to_text(unit_data.get("content")),
                 order=unit_idx,
                 sessions=sessions,
                 is_synthetic=False,

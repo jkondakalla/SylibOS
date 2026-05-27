@@ -27,6 +27,11 @@ function stripHtml(html: string): string {
     .trim()
 }
 
+function stripShortcodes(text: string): string {
+  // Remove Hugo shortcodes: {{< resource "uid" >}}, {{< tableopen >}}, etc.
+  return text.replace(/\{\{[<>][^}]*[<>]\}\}/g, '')
+}
+
 function extractTitle(html: string, filename: string): string {
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
   if (titleMatch) {
@@ -101,8 +106,11 @@ function parseOcwFilename(zipPath: string): OcwFile | null {
 }
 
 function sessionTitle(type: string, sessionId: string): string {
-  const labels: Record<string, string> = { ses: 'Session', lec: 'Lecture', rec: 'Recitation' }
-  return `${labels[type] ?? type} ${sessionId.toUpperCase()}`
+  const labels: Record<string, string> = {
+    ses: 'Session', lec: 'Lecture', rec: 'Recitation',
+    notes: 'Lecture', reading: 'Reading',
+  }
+  return `${labels[type] ?? 'Session'} ${sessionId.toUpperCase()}`
 }
 
 // ── Syllabus / calendar parsing ─────────────────────────────────────────────
@@ -235,6 +243,177 @@ function isHtmlLecturePath(path: string): boolean {
   )
 }
 
+// ── Modern MIT OCW JSON format (post-2015, Hugo/ocw-studio) ────────────────
+
+const _FEATURE_PRIORITY = [
+  'lecture-notes', 'lectures', 'recitations', 'assignments', 'readings',
+]
+const _SKIP_SLUGS = new Set([
+  'syllabus', 'resource-index', 'instructor-insights', 'related-resources', 'exams',
+])
+
+async function parseModernOcwZip(
+  zip: JSZip,
+  allFiles: string[],
+  courseId: string,
+  prefix: string,
+  onProgress?: (p: ParseProgress) => void,
+): Promise<{ courseTitle: string; instructor: string; description: string; subject: string; lectures: Lecture[] }> {
+  let courseTitle = ''
+  let instructor  = ''
+  let description = ''
+  let subject     = ''
+
+  // ── Root metadata ─────────────────────────────────────────────────────────
+  const rootDataPath = prefix + 'data.json'
+  if (zip.files[rootDataPath]) {
+    try {
+      const rd = JSON.parse(await zip.files[rootDataPath].async('string'))
+      courseTitle = rd.course_title || ''
+      instructor  = ((rd.instructors ?? []) as any[])
+        .map((i: any) => [i.first_name, i.middle_initial, i.last_name].filter(Boolean).join(' '))
+        .join(', ')
+      description = rd.course_description || ''
+      const deptNums: string[] = rd.department_numbers ?? []
+      if (deptNums.length > 0) subject = deptNums[0]
+    } catch { /* ignore */ }
+  }
+
+  // ── Video map: page_uid → YouTube URL (prefer Lecture Videos) ───────────
+  // Each session can have multiple video resources (lecture + recitation).
+  // We store the best match per parent_uid: lecture video beats recitation.
+  const videoMap = new Map<string, { url: string; isLecture: boolean }>()
+  const resourcesPrefix = prefix + 'resources/'
+  for (const f of allFiles.filter(p => p.startsWith(resourcesPrefix) && p.endsWith('/data.json'))) {
+    try {
+      const rd = JSON.parse(await zip.files[f].async('string'))
+      const types: string[] = rd.learning_resource_types ?? []
+      const ytId: string | undefined = rd.video_metadata?.youtube_id
+      const parentUid: string | undefined = rd.parent_uid
+      if (types.some(t => t.includes('Video')) && ytId && parentUid) {
+        const isLecture = types.includes('Lecture Videos')
+        const existing  = videoMap.get(parentUid)
+        if (!existing || (!existing.isLecture && isLecture)) {
+          videoMap.set(parentUid, { url: `https://www.youtube.com/watch?v=${ytId}`, isLecture })
+        }
+      }
+    } catch { /* skip */ }
+  }
+
+  // ── Page catalogue ────────────────────────────────────────────────────────
+  const pagesPrefix = prefix + 'pages/'
+  const pageFiles   = allFiles
+    .filter(p => p.startsWith(pagesPrefix) && p.endsWith('/data.json'))
+    .sort()
+
+  const topDirSet = new Set<string>()
+  for (const f of pageFiles) {
+    const rel   = f.slice(pagesPrefix.length)
+    const slash = rel.indexOf('/')
+    if (slash > 0) topDirSet.add(rel.slice(0, slash))
+  }
+
+  // Mirror Python's detect_shape logic:
+  //   Scholar  = no top-level feature slugs AND ≥1 top-level dir has ≥2 direct session sub-dirs
+  //   Flat-feature = everything else
+  const hasFeatureSlugs = [...topDirSet].some(d => _FEATURE_PRIORITY.includes(d))
+  const directChildren = (dirSlug: string) => {
+    const dp = pagesPrefix + dirSlug + '/'
+    return pageFiles.filter(f => {
+      if (!f.startsWith(dp)) return false
+      const rel = f.slice(dp.length)
+      return (rel.match(/\//g) ?? []).length === 1 && rel.endsWith('/data.json')
+    })
+  }
+  const isScholarCourse = !hasFeatureSlugs &&
+    [...topDirSet].some(d => directChildren(d).length >= 2)
+
+  const lectures: Lecture[] = []
+
+  if (!isScholarCourse) {
+    // ── Flat-feature: pages/{feature}/{item}/data.json ────────────────────
+    for (const feature of _FEATURE_PRIORITY.filter(d => topDirSet.has(d))) {
+      const featurePrefix = pagesPrefix + feature + '/'
+      const itemFiles = pageFiles.filter(f => {
+        if (!f.startsWith(featurePrefix)) return false
+        const rel = f.slice(featurePrefix.length)
+        return (rel.match(/\//g) ?? []).length === 1 && rel.endsWith('/data.json')
+      })
+
+      onProgress?.({
+        stage: 'extracting', current: 0, total: itemFiles.length,
+        message: `Reading ${feature.replace(/-/g, ' ')} (${itemFiles.length} items)…`,
+      })
+
+      for (let i = 0; i < itemFiles.length; i++) {
+        try {
+          const data  = JSON.parse(await zip.files[itemFiles[i]].async('string'))
+          const title: string = data.title || itemFiles[i].split('/').slice(-2, -1)[0]
+          const uid: string   = data.uid   || ''
+          const rawContent = stripHtml(stripShortcodes(data.content ?? '')).slice(0, 8000)
+          const content = rawContent.trim() || title
+          const videoUrl = uid ? videoMap.get(uid)?.url : undefined
+          if (!title) continue
+
+          onProgress?.({
+            stage: 'extracting', current: i + 1, total: itemFiles.length,
+            message: `${i + 1}/${itemFiles.length}: ${title}…`,
+          })
+          lectures.push({
+            id: randomId(), courseId, title,
+            unit: feature.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+            order: lectures.length + 1,
+            content: content || title,
+            videoUrl,
+            hasSegment: false,
+          })
+        } catch { /* skip */ }
+      }
+    }
+  } else {
+    // ── Scholar: pages/{unit}/{session}/data.json ─────────────────────────
+    // Only process dirs that have ≥2 session sub-dirs (true units), skip meta pages.
+    const unitDirs = [...topDirSet]
+      .filter(d => !_SKIP_SLUGS.has(d) && directChildren(d).length >= 1)
+      .sort()
+
+    for (const unitSlug of unitDirs) {
+      const unitPrefix = pagesPrefix + unitSlug + '/'
+      let unitTitle = unitSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+      if (zip.files[unitPrefix + 'data.json']) {
+        try {
+          const ud = JSON.parse(await zip.files[unitPrefix + 'data.json'].async('string'))
+          unitTitle = ud.title || unitTitle
+        } catch { /* use slug */ }
+      }
+
+      const sessionFiles = directChildren(unitSlug)
+
+      for (const f of sessionFiles) {
+        try {
+          const data  = JSON.parse(await zip.files[f].async('string'))
+          const title: string = data.title || ''
+          const uid: string   = data.uid   || ''
+          const rawContent = stripHtml(stripShortcodes(data.content ?? '')).slice(0, 8000)
+          const content = rawContent.trim() || title
+          const videoUrl = uid ? videoMap.get(uid)?.url : undefined
+          if (!title) continue
+          lectures.push({
+            id: randomId(), courseId, title,
+            unit: unitTitle,
+            order: lectures.length + 1,
+            content: content || title,
+            videoUrl,
+            hasSegment: false,
+          })
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  return { courseTitle, instructor, description, subject, lectures }
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export interface ParseProgress {
@@ -286,11 +465,30 @@ export async function parseCourseZip(
   const courseId = randomId()
   const lectures: Lecture[] = []
 
-  // ── Pass 1: MIT OCW deterministic parsing ───────────────────────────────────
+  // ── Pass 0: Modern MIT OCW (data.json + pages/) ─────────────────────────────
+  const rootDataJsonEntry = allFiles.find(
+    p => p === 'data.json' || /^[^/]+\/data\.json$/.test(p),
+  )
+  if (rootDataJsonEntry) {
+    const prefix = rootDataJsonEntry === 'data.json'
+      ? ''
+      : rootDataJsonEntry.slice(0, rootDataJsonEntry.lastIndexOf('/') + 1)
+    if (allFiles.some(p => p.startsWith(prefix + 'pages/'))) {
+      onProgress?.({ stage: 'extracting', current: 0, total: 0, message: 'Detected modern OCW format…' })
+      const result = await parseModernOcwZip(zip, allFiles, courseId, prefix, onProgress)
+      if (result.courseTitle) courseTitle = result.courseTitle
+      if (result.instructor)  instructor  = result.instructor
+      if (result.description) description = result.description
+      if (result.subject)     subject     = result.subject
+      lectures.push(...result.lectures)
+    }
+  }
+
+  // ── Pass 1: Old MIT OCW deterministic PDF parsing ────────────────────────────
   const allPdfs = allFiles.filter(p => p.toLowerCase().endsWith('.pdf'))
   const ocwFiles = allPdfs.map(parseOcwFilename).filter((f): f is OcwFile => f !== null)
 
-  if (ocwFiles.length >= 3) {
+  if (lectures.length === 0 && ocwFiles.length >= 3) {
     // Load syllabus for title/unit lookup
     let syllabusMap = new Map<string, SessionInfo>()
     const sylPath = findSyllabusPath(allFiles)

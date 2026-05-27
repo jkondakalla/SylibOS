@@ -142,7 +142,11 @@ def preprocess(
             for session in unit.sessions:
                 session.overview = resolver.resolve(session.overview)
                 for r in session.resources:
+                    r.title       = resolver.resolve(r.title)
                     r.description = resolver.resolve(r.description)
+        for r in unlinked:
+            r.title       = resolver.resolve(r.title)
+            r.description = resolver.resolve(r.description)
 
         # ── Syllabus supplement (prerequisites / goals) ───────────────────────
         syllabus = _parse_syllabus(zip_root, resolver)
@@ -196,10 +200,26 @@ def _hash_file(path: Path) -> str:
     return h.hexdigest()
 
 
+_JUNK_NAMES = frozenset({"__MACOSX", "__pycache__", ".DS_Store"})
+
+
 def _extract_and_normalize(zip_path: Path, dest: Path) -> Path:
-    with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(dest)
-    children = [c for c in dest.iterdir() if not c.name.startswith(".")]
+    dest_resolved = dest.resolve()
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            # Zip-slip guard: reject any entry that would escape the destination
+            for entry in zf.namelist():
+                target = (dest / entry).resolve()
+                if not str(target).startswith(str(dest_resolved) + "/") and target != dest_resolved:
+                    raise ValueError(f"Unsafe zip entry (zip-slip): {entry}")
+            zf.extractall(dest)
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"Not a valid ZIP file: {exc}") from exc
+
+    children = [
+        c for c in dest.iterdir()
+        if c.name not in _JUNK_NAMES and not c.name.startswith(".")
+    ]
     if len(children) == 1 and children[0].is_dir():
         return children[0]
     return dest
@@ -208,7 +228,7 @@ def _extract_and_normalize(zip_path: Path, dest: Path) -> Path:
 def _extract_between(text: str, start: str, end_candidates: list[str]) -> str:
     """Extract text between start header and the first matching end header."""
     m = re.search(
-        rf"(?:^|\n)\s*{re.escape(start)}\s*\n",
+        rf"(?:^|\n)\s*{re.escape(start)}[:\s]*\n",
         text, re.IGNORECASE,
     )
     if not m:
@@ -217,7 +237,7 @@ def _extract_between(text: str, start: str, end_candidates: list[str]) -> str:
     end_pos = len(text)
     for end_word in end_candidates:
         em = re.search(
-            rf"(?:^|\n)\s*{re.escape(end_word)}\s*\n",
+            rf"(?:^|\n)\s*{re.escape(end_word)}[:\s]*\n",
             text, re.IGNORECASE,
         )
         if em and em.start() > body_start and em.start() < end_pos:
@@ -225,26 +245,50 @@ def _extract_between(text: str, start: str, end_candidates: list[str]) -> str:
     return text[body_start:end_pos].strip()
 
 
+_SYLLABUS_SLUGS = ("syllabus", "course-info", "about-this-course", "overview", "calendar")
+_PREREQ_HEADERS = ("Prerequisites", "Required Background", "Background")
+_GOALS_HEADERS  = ("Course Goals", "Learning Goals", "Learning Objectives", "Goals", "Objectives")
+_END_HEADERS    = ("Format", "Grading", "Textbooks", "Materials", "Calendar",
+                   "Schedule", "Assignments", "Policies")
+
+
 def _parse_syllabus(zip_root: Path, resolver: ShortcodeResolver) -> dict:
     """
-    Parse pages/syllabus/data.json for prerequisites and goals.
+    Parse pages/{syllabus-slug}/data.json for prerequisites and goals.
+    Tries multiple candidate page slugs in priority order.
     Returns dict with keys: prerequisites, goals.
     """
-    sp = zip_root / "pages" / "syllabus" / "data.json"
-    if not sp.exists():
-        return {}
-    try:
-        data = json.loads(sp.read_text(encoding="utf-8"))
-    except Exception:
+    pages_dir = zip_root / "pages"
+    content_html = ""
+
+    for slug in _SYLLABUS_SLUGS:
+        sp = pages_dir / slug / "data.json"
+        if sp.exists():
+            try:
+                data = json.loads(sp.read_text(encoding="utf-8", errors="replace"))
+                content_html = data.get("content") or ""
+                if content_html:
+                    break
+            except Exception:
+                continue
+
+    if not content_html:
         return {}
 
-    html    = resolver.resolve(data.get("content", ""))
-    text    = html_to_text(html)
-    prereqs = _extract_between(text, "Prerequisites", ["Course Goals", "Goals", "Format", "Grading"])
-    goals   = (
-        _extract_between(text, "Course Goals", ["Format", "Grading", "Prerequisites"])
-        or _extract_between(text, "Goals",      ["Format", "Grading", "Prerequisites"])
-    )
+    text = html_to_text(resolver.resolve(content_html))
+
+    prereqs = ""
+    for h in _PREREQ_HEADERS:
+        prereqs = _extract_between(text, h, list(_GOALS_HEADERS) + list(_END_HEADERS))
+        if prereqs:
+            break
+
+    goals = ""
+    for h in _GOALS_HEADERS:
+        goals = _extract_between(text, h, list(_PREREQ_HEADERS) + list(_END_HEADERS))
+        if goals:
+            break
+
     return {"prerequisites": prereqs, "goals": goals}
 
 

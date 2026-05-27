@@ -1,10 +1,22 @@
-const LESSON_PROMPT = (title, content) => `\
-You are an educational assistant. Based on the following lecture content, generate a structured JSON response.
+const LESSON_PROMPT = (title, content, unit, courseTitle) => {
+  const hasContent = content && content.trim().length > 30
 
-Lecture: "${title}"
+  const contextLines = [
+    courseTitle ? `Course: "${courseTitle}"` : '',
+    unit        ? `Unit: "${unit}"`          : '',
+    `Lecture: "${title}"`,
+  ].filter(Boolean).join('\n')
 
-Content:
-${content.slice(0, 4000)}
+  const contentSection = hasContent
+    ? `Lecture notes:\n${content.trim().slice(0, 4000)}`
+    : `(No lecture notes were extracted for this session. Generate questions and tasks based on the lecture title and the standard university curriculum for this topic.)`
+
+  return `\
+You are an educational assistant. Generate study material for the following lecture.
+
+${contextLines}
+
+${contentSection}
 
 Respond with ONLY valid JSON in this exact format:
 {
@@ -27,9 +39,11 @@ Respond with ONLY valid JSON in this exact format:
 Rules:
 - Generate exactly 4 quiz questions
 - Generate exactly 2 practical tasks
-- Quiz questions should test understanding, not trivia
+- Quiz questions should test conceptual understanding, not trivia
 - Tasks should be actionable in ~2 minutes
-- correctIndex is 0-based (0=A, 1=B, 2=C, 3=D)`
+- correctIndex is 0-based (0=A, 1=B, 2=C, 3=D)
+- If no lecture notes are provided, infer from the lecture title what a standard university course on this topic would cover`
+}
 
 function mockContent(title) {
   return {
@@ -72,13 +86,13 @@ function mockContent(title) {
   }
 }
 
-async function callOllama(url, model, title, content) {
+async function callOllama(url, model, title, content, unit, courseTitle) {
   const res = await fetch(`${url}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      prompt: LESSON_PROMPT(title, content),
+      prompt: LESSON_PROMPT(title, content, unit, courseTitle),
       stream: false,
       format: 'json',
     }),
@@ -88,7 +102,7 @@ async function callOllama(url, model, title, content) {
   return JSON.parse(data.response)
 }
 
-async function callLazuros(url, token, model, title, content) {
+async function callLazuros(url, token, model, title, content, unit, courseTitle) {
   const res = await fetch(`${url}/api/generate`, {
     method: 'POST',
     headers: {
@@ -97,7 +111,7 @@ async function callLazuros(url, token, model, title, content) {
     },
     body: JSON.stringify({
       model,
-      prompt: LESSON_PROMPT(title, content),
+      prompt: LESSON_PROMPT(title, content, unit, courseTitle),
       stream: false,
       format: 'json',
     }),
@@ -107,12 +121,12 @@ async function callLazuros(url, token, model, title, content) {
   return JSON.parse(data.response)
 }
 
-export async function generateSegmentContent(settings, lectureTitle, lectureContent) {
+export async function generateSegmentContent(settings, lectureTitle, lectureContent, unit, courseTitle) {
   const { aiProvider, lazurosUrl, lazurosToken, ollamaUrl, ollamaModel } = settings
 
   if (aiProvider === 'lazuros' && lazurosUrl) {
     try {
-      return await callLazuros(lazurosUrl, lazurosToken ?? '', ollamaModel ?? 'llama3.2', lectureTitle, lectureContent)
+      return await callLazuros(lazurosUrl, lazurosToken ?? '', ollamaModel ?? 'llama3.2', lectureTitle, lectureContent, unit, courseTitle)
     } catch (e) {
       console.warn(`[ai] LazurOS failed for "${lectureTitle}":`, e.message)
     }
@@ -120,7 +134,7 @@ export async function generateSegmentContent(settings, lectureTitle, lectureCont
 
   if (aiProvider === 'ollama' && ollamaUrl) {
     try {
-      return await callOllama(ollamaUrl, ollamaModel ?? 'llama3', lectureTitle, lectureContent)
+      return await callOllama(ollamaUrl, ollamaModel ?? 'llama3', lectureTitle, lectureContent, unit, courseTitle)
     } catch (e) {
       console.warn(`[ai] Ollama failed for "${lectureTitle}":`, e.message)
     }

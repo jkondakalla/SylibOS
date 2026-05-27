@@ -13,17 +13,20 @@ import json
 import re
 from pathlib import Path
 
-from .._utils import html_to_text, read_json
+from .._utils import enrich_overview, html_to_text, read_json, str_field
 from ..manifest import SessionNode, UnitNode
 from .base import SpineBuilder
 
-# Ordered list of feature slugs — determines collection priority
+# Ordered list of feature slugs — determines collection priority.
+# Covers the full range of slug names seen across OCW Studio exports.
 _FEATURE_PRIORITY = [
-    "lecture-notes", "lectures",
+    "lecture-notes", "lectures", "lecture-slides",
     "recitations",
     "assignments", "assignments-and-problem-sets", "problem-sets",
     "exams",
     "readings",
+    "tools",
+    "study-materials",
 ]
 
 _SKIP_SLUGS = frozenset({
@@ -79,14 +82,17 @@ class FlatFeatureBuilder(SpineBuilder):
                         data = read_json(sp)
                     except ValueError:
                         continue
-                    title = data.get("title", sub.name)
+                    if data.get("deleted"):
+                        continue
+                    title = str_field(data, "title", sub.name)
                     key = _sort_key(title, sub.name)
                     sessions.append((key, SessionNode(
                         slug=sub.name,
                         title=title,
-                        overview=html_to_text(data.get("content", "")),
+                        overview=enrich_overview(html_to_text(data.get("content")), data),
                         is_assessment=bool(_EXAM_PAT.search(sub.name)),
                         order=0,
+                        page_uid=data.get("uid") or data.get("id"),
                     )))
         else:
             # Fallback: top-level pages/ items as sessions
@@ -103,13 +109,16 @@ class FlatFeatureBuilder(SpineBuilder):
                     data = read_json(sp)
                 except ValueError:
                     continue
-                title = data.get("title", d.name)
+                if data.get("deleted"):
+                    continue
+                title = str_field(data, "title", d.name)
                 sessions.append((_sort_key(title, d.name), SessionNode(
                     slug=d.name,
                     title=title,
-                    overview=html_to_text(data.get("content", "")),
+                    overview=enrich_overview(html_to_text(data.get("content")), data),
                     is_assessment=bool(_EXAM_PAT.search(d.name)),
                     order=0,
+                    page_uid=data.get("uid") or data.get("id"),
                 )))
 
         if not sessions:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .._utils import html_to_text, read_json
+from .._utils import enrich_overview, html_to_text, read_json, str_field
 from ..manifest import SessionNode, UnitNode
 from .base import SpineBuilder
 
@@ -37,7 +37,8 @@ class SeminarBuilder(SpineBuilder):
 
     def _build_by_week(self, week_dirs: list[Path]) -> list[UnitNode]:
         units: list[UnitNode] = []
-        for unit_idx, week_dir in enumerate(week_dirs):
+        unit_idx = 0
+        for week_dir in week_dirs:
             if not _WEEK_PAT.match(week_dir.name):
                 continue
             up = week_dir / "data.json"
@@ -46,8 +47,8 @@ class SeminarBuilder(SpineBuilder):
             if up.exists():
                 try:
                     d = read_json(up)
-                    title    = d.get("title", title)
-                    overview = html_to_text(d.get("content", ""))
+                    title    = str_field(d, "title", title)
+                    overview = html_to_text(d.get("content"))
                 except ValueError:
                     pass
 
@@ -63,12 +64,15 @@ class SeminarBuilder(SpineBuilder):
                     data = read_json(sp)
                 except ValueError:
                     continue
+                if data.get("deleted"):
+                    continue
                 sessions.append(SessionNode(
                     slug=sub.name,
-                    title=data.get("title", sub.name),
-                    overview=html_to_text(data.get("content", "")),
+                    title=str_field(data, "title", sub.name),
+                    overview=enrich_overview(html_to_text(data.get("content")), data),
                     is_assessment=False,
                     order=si,
+                    page_uid=data.get("uid") or data.get("id"),
                 ))
 
             if not sessions:
@@ -82,6 +86,7 @@ class SeminarBuilder(SpineBuilder):
                 sessions=sessions,
                 is_synthetic=False,
             ))
+            unit_idx += 1
 
         return units
 
@@ -91,18 +96,20 @@ class SeminarBuilder(SpineBuilder):
         for si, sub in enumerate(sub_dirs):
             sp = sub / "data.json"
             if not sp.exists():
-                # Try the readings_dir data.json for a listing page
                 continue
             try:
                 data = read_json(sp)
             except ValueError:
                 continue
+            if data.get("deleted"):
+                continue
             sessions.append(SessionNode(
                 slug=sub.name,
-                title=data.get("title", sub.name),
-                overview=html_to_text(data.get("content", "")),
+                title=str_field(data, "title", sub.name),
+                overview=enrich_overview(html_to_text(data.get("content")), data),
                 is_assessment=False,
                 order=si,
+                page_uid=data.get("uid") or data.get("id"),
             ))
 
         if not sessions:

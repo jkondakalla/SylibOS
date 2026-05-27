@@ -192,7 +192,7 @@ async function runNightlyJob() {
   let ok = 0, fail = 0
   for (const lec of lectures) {
     try {
-      const content = await generateSegmentContent(settings, lec.title, lec.content)
+      const content = await generateSegmentContent(settings, lec.title, lec.content, lec.unit, lec.courseTitle)
 
       insertSegment({
         id: Math.random().toString(36).slice(2, 10),

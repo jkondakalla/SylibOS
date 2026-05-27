@@ -25,7 +25,8 @@ from .manifest import CourseManifest, SessionNode, UnitNode
 _CONTENT_LIMIT = 8_000
 
 _YT_PAT  = re.compile(
-    r"https?://(?:www\.)?youtube\.com/watch\?v=[\w-]+|https?://youtu\.be/[\w-]+"
+    r"https?://(?:www\.)?youtube\.com/(?:watch\?v=|embed/|v/)[\w-]+"
+    r"|https?://youtu\.be/[\w-]+"
 )
 _ARC_PAT = re.compile(r"https?://archive\.org/(?:details|download)/[\w./-]+")
 
@@ -50,16 +51,30 @@ def _extract_video_url(session: SessionNode) -> str | None:
 
 
 def _build_lecture_content(session: SessionNode) -> str:
-    """overview + first lecture_notes.extracted_text, capped at _CONTENT_LIMIT."""
+    """
+    overview + first lecture_notes.extracted_text, capped at _CONTENT_LIMIT.
+    Falls back to transcript text when no PDF notes were extracted.
+    """
     parts: list[str] = []
     if session.overview:
         parts.append(session.overview)
-    for resource in session.resources:
-        if resource.primary_type != "Lecture Notes":
-            continue
-        if resource.extracted_text:
-            parts.append(resource.extracted_text)
-            break
+
+    notes_text = next(
+        (r.extracted_text for r in session.resources
+         if r.primary_type == "Lecture Notes" and r.extracted_text),
+        None,
+    )
+    if notes_text:
+        parts.append(notes_text)
+    else:
+        # No PDF notes — use transcript as a content source (capped to avoid bloat)
+        transcript = next(
+            (r.transcript_text for r in session.resources if r.transcript_text),
+            None,
+        )
+        if transcript:
+            parts.append(transcript[:4_000])
+
     return "\n\n".join(parts)[:_CONTENT_LIMIT].strip()
 
 
@@ -114,13 +129,18 @@ def manifest_to_course(
         else ""
     )
 
+    level = (
+        manifest.level[0] if manifest.level
+        else manifest.term or ""
+    )
+
     return {
         "id":                course_id,
         "title":             manifest.title,
         "description":       description,
         "instructor":        instructor,
         "subject":           subject,
-        "level":             manifest.term,
+        "level":             level,
         "importedAt":        int(time.time() * 1000),
         "completedSegments": 0,
         "lectures":          lectures,
@@ -152,11 +172,11 @@ def manifest_to_lesson_context(
         raise ValueError(f"Session '{session_slug}' not found in unit '{unit_slug}'")
 
     all_sessions = [s for u in manifest.units for s in u.sessions]
-    idx = next((i for i, s in enumerate(all_sessions) if s.slug == session_slug), -1)
-    prior_titles = [
-        s.title
-        for s in all_sessions[max(0, idx - prior_session_count): idx]
-    ]
+    idx = next((i for i, s in enumerate(all_sessions) if s is session), -1)
+    prior_titles = (
+        [s.title for s in all_sessions[max(0, idx - prior_session_count): idx]]
+        if idx > 0 else []
+    )
 
     return {
         "course": {

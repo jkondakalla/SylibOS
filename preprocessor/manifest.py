@@ -21,6 +21,7 @@ class Instructor(BaseModel):
 class ResourceNode(BaseModel):
     slug: str
     uid: Optional[str] = None
+    parent_uid: Optional[str] = None
     title: str
     description: str = ""
     primary_type: str
@@ -38,6 +39,7 @@ class SessionNode(BaseModel):
     overview: str = ""
     is_assessment: bool = False
     order: int = 0
+    page_uid: Optional[str] = None
     resources: list[ResourceNode] = Field(default_factory=list)
     prerequisite_session_slugs: list[str] = Field(default_factory=list)
 

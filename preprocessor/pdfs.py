@@ -63,24 +63,70 @@ def clean_pdf_text(text: str) -> str:
     return text.strip()
 
 
+_HASH_PREFIX = re.compile(r"^[0-9a-f]{32}[_-]", re.IGNORECASE)
+
+
 def _resolve_pdf_path(file_path: str, zip_root: Path) -> Optional[Path]:
     """
-    file_path is the `file` field from resource data.json, a URL-like path:
-      /courses/18-06sc.../resources/ses1-1-lecture-notes/...pdf
-    The actual PDF is in static_resources/ (primary) or resources/ (fallback).
+    file_path is the `file` field from resource data.json.
+    It may be:
+      (a) a URL-like path:  /courses/18-06sc.../resources/ses1-1/.../notes.pdf
+      (b) a relative path:  static_resources/{hash}_notes.pdf
+      (c) just a filename:  notes.pdf
+
+    PDFs in static_resources/ are stored with a 32-char hex hash prefix:
+      {32hex}_{original-name}.pdf
+    so direct filename lookup fails — we need a hash-prefix-aware search.
     """
     if not file_path:
         return None
+
     filename = Path(file_path.lstrip("/")).name
-    candidates = [
-        zip_root / "static_resources" / filename,
-        zip_root / file_path.lstrip("/"),
-        zip_root / "resources" / filename,
-    ]
-    return next(
-        (p for p in candidates if p.exists() and p.suffix.lower() == ".pdf"),
-        None,
-    )
+    if not filename:
+        return None
+
+    def is_pdf(p: Path) -> bool:
+        return p.exists() and p.suffix.lower() == ".pdf"
+
+    # 1. Exact match in static_resources (works when file field already has hash prefix)
+    c = zip_root / "static_resources" / filename
+    if is_pdf(c):
+        return c
+
+    # 2. Strip course-slug prefix from URL and resolve within zip_root.
+    #    e.g. /courses/18-06sc.../static_resources/notes.pdf  →  static_resources/notes.pdf
+    parts = Path(file_path.lstrip("/")).parts
+    for i, part in enumerate(parts):
+        if part in ("static_resources", "resources"):
+            candidate = zip_root.joinpath(*parts[i:])
+            if is_pdf(candidate):
+                return candidate
+
+    # 3. Hash-prefix search in static_resources/ — the common case for modern OCW.
+    #    Files are stored as {32hex}_{original-filename}.pdf; the `file` URL only
+    #    has the original name.  Scan the directory rather than glob to handle
+    #    case-insensitive filesystems and slight name variations.
+    sr_dir = zip_root / "static_resources"
+    if sr_dir.is_dir():
+        stem_lower = Path(filename).stem.lower()
+        for f in sr_dir.iterdir():
+            if f.suffix.lower() != ".pdf":
+                continue
+            # Strip hash prefix to compare against the original name
+            orig = _HASH_PREFIX.sub("", f.name)
+            if orig.lower() == filename.lower():
+                return f
+            # Looser: match by stem (ignores quality suffix like _300k)
+            orig_stem = Path(orig).stem.lower()
+            if orig_stem and stem_lower.startswith(orig_stem[:12]):
+                return f
+
+    # 4. Any PDF anywhere under resources/ matching the filename
+    for p in (zip_root / "resources").rglob(filename):
+        if is_pdf(p):
+            return p
+
+    return None
 
 
 def extract_pdf_text(

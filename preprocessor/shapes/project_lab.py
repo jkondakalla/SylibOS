@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .._utils import html_to_text, read_json
+from .._utils import enrich_overview, html_to_text, read_json, str_field
 from ..manifest import SessionNode, UnitNode
 from .base import SpineBuilder
 
@@ -48,6 +48,9 @@ class ProjectLabBuilder(SpineBuilder):
             except ValueError:
                 continue
 
+            if unit_data.get("deleted"):
+                continue
+
             sub_dirs = sorted(
                 d for d in unit_dir.iterdir()
                 if d.is_dir() and not d.name.startswith(".")
@@ -62,34 +65,37 @@ class ProjectLabBuilder(SpineBuilder):
                     data = read_json(sp)
                 except ValueError:
                     continue
-                content = data.get("content", "")
+                if data.get("deleted"):
+                    continue
+                content = data.get("content") or ""
                 is_assessment = bool(
                     _ASSESSMENT_PAT.search(sub.name)
                     or _ASSESSMENT_PAT.search(content[:500])
                 )
                 sessions.append(SessionNode(
                     slug=sub.name,
-                    title=data.get("title", sub.name),
-                    overview=html_to_text(content),
+                    title=str_field(data, "title", sub.name),
+                    overview=enrich_overview(html_to_text(data.get("content")), data),
                     is_assessment=is_assessment,
                     order=si,
+                    page_uid=data.get("uid") or data.get("id"),
                 ))
 
             if not sessions:
                 # The unit dir itself is a single-session unit
-                content = unit_data.get("content", "")
                 sessions = [SessionNode(
                     slug=unit_dir.name,
-                    title=unit_data.get("title", unit_dir.name),
-                    overview=html_to_text(content),
+                    title=str_field(unit_data, "title", unit_dir.name),
+                    overview=enrich_overview(html_to_text(unit_data.get("content")), unit_data),
                     is_assessment=False,
                     order=0,
+                    page_uid=unit_data.get("uid") or unit_data.get("id"),
                 )]
 
             units.append(UnitNode(
                 slug=unit_dir.name,
-                title=unit_data.get("title", unit_dir.name),
-                overview=html_to_text(unit_data.get("content", "")),
+                title=str_field(unit_data, "title", unit_dir.name),
+                overview=html_to_text(unit_data.get("content")),
                 order=unit_idx,
                 sessions=sessions,
                 is_synthetic=False,

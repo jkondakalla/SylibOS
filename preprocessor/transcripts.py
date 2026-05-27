@@ -21,25 +21,35 @@ _VIDEO_TYPES = frozenset({
 })
 
 
+_BARE_YT_ID = re.compile(r"^([A-Za-z0-9_-]{11})\.(vtt|srt)$")
+
+
 def index_captions(zip_root: Path) -> dict[str, Path]:
     """
     Returns {youtube_id: caption_file_path}.
     Prefers VTT over SRT when both exist.
+    Handles two naming conventions:
+      (a) {32hex}_{yt_id}.vtt  — modern OCW hash-prefixed files
+      (b) {yt_id}.vtt          — files stored without a hash prefix
     """
     captions: dict[str, Path] = {}
     static_dir = zip_root / "static_resources"
     if not static_dir.exists():
         return captions
 
-    for caption in static_dir.glob("*.vtt"):
-        m = YOUTUBE_ID_PAT.search(caption.name)
-        if m:
-            captions[m.group(1)] = caption
-
-    for caption in static_dir.glob("*.srt"):
-        m = YOUTUBE_ID_PAT.search(caption.name)
-        if m and m.group(1) not in captions:
-            captions[m.group(1)] = caption
+    for ext in ("*.vtt", "*.srt"):
+        for caption in static_dir.glob(ext):
+            yt_id: str | None = None
+            m = YOUTUBE_ID_PAT.search(caption.name)
+            if m:
+                yt_id = m.group(1)
+            else:
+                # Bare {yt_id}.vtt with no hash prefix
+                m2 = _BARE_YT_ID.match(caption.name)
+                if m2:
+                    yt_id = m2.group(1)
+            if yt_id and (yt_id not in captions or caption.suffix.lower() == ".vtt"):
+                captions[yt_id] = caption
 
     return captions
 
