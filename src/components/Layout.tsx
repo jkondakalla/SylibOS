@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
+import { useAuthStore } from '../store/authStore'
 
 const navLinks = [
   { to: '/', label: 'Today', end: true },
@@ -10,8 +11,31 @@ const navLinks = [
 
 export default function Layout() {
   const { segments, hydrate } = useAppStore()
+  const { status, init } = useAuthStore()
 
-  useEffect(() => { hydrate() }, [])
+  useEffect(() => { init() }, [])
+  useEffect(() => {
+    if (status === 'ready') hydrate()
+  }, [status])
+
+  if (status === 'loading' || status === 'unauthenticated') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#0f0f13',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#6b7280',
+        fontFamily: 'monospace',
+        fontSize: 13,
+        letterSpacing: '0.08em',
+      }}>
+        {status === 'loading' ? 'VERIFYING SESSION…' : 'REDIRECTING…'}
+      </div>
+    )
+  }
+
   const total = Object.keys(segments).length
   const done = Object.values(segments).filter(s => s.completedAt).length
 

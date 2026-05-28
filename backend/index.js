@@ -1,7 +1,8 @@
 import express from 'express'
+import cookieParser from 'cookie-parser'
 import cors from 'cors'
-import jwt from 'jsonwebtoken'
 import cron from 'node-cron'
+import { jkosAuth } from './jkos-auth.js'
 import {
   getCourses, getCourse, insertCourse, deleteCourse,
   getSegments, insertSegment, patchSegment, updateCourseCompletedSegments,
@@ -13,40 +14,29 @@ import { generateSegmentContent } from './ai.js'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 8004)
-const JWT_SECRET = process.env.JWT_SECRET
 const NIGHTLY_CRON = process.env.NIGHTLY_CRON ?? '0 2 * * *'
 
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '20mb' }))
+app.use(cookieParser())
 
-// ── Auth middleware (optional — only enforced when JWT_SECRET is set) ─────────
-
-function authMiddleware(req, res, next) {
-  if (!JWT_SECRET) return next()
-  const header = req.headers.authorization ?? ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null
-  if (!token) return res.status(401).json({ error: 'Unauthorized' })
-  try {
-    jwt.verify(token, JWT_SECRET)
-    next()
-  } catch {
-    res.status(401).json({ error: 'Invalid token' })
-  }
-}
-
-// ── Health ────────────────────────────────────────────────────────────────────
+// ── Health (public — before auth middleware) ───────────────────────────────────
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'opencourseflow-api' })
 })
 
+// ── Auth (all routes below this require a valid jkos_token cookie) ────────────
+
+app.use(jkosAuth({ publicKey: process.env.JKOS_AUTH_PUBLIC_KEY ?? '' }))
+
 // ── Courses ───────────────────────────────────────────────────────────────────
 
-app.get('/api/courses', authMiddleware, (_req, res) => {
+app.get('/api/courses', (_req, res) => {
   res.json(getCourses())
 })
 
-app.post('/api/courses', authMiddleware, (req, res) => {
+app.post('/api/courses', (req, res) => {
   const course = req.body
   if (!course?.id || !course?.title) {
     return res.status(400).json({ error: 'id and title required' })
@@ -55,24 +45,24 @@ app.post('/api/courses', authMiddleware, (req, res) => {
   res.status(201).json({ ok: true })
 })
 
-app.get('/api/courses/:id', authMiddleware, (req, res) => {
+app.get('/api/courses/:id', (req, res) => {
   const course = getCourse(req.params.id)
   if (!course) return res.status(404).json({ error: 'Not found' })
   res.json(course)
 })
 
-app.delete('/api/courses/:id', authMiddleware, (req, res) => {
+app.delete('/api/courses/:id', (req, res) => {
   deleteCourse(req.params.id)
   res.json({ ok: true })
 })
 
 // ── Segments ──────────────────────────────────────────────────────────────────
 
-app.get('/api/segments', authMiddleware, (_req, res) => {
+app.get('/api/segments', (_req, res) => {
   res.json(getSegments())
 })
 
-app.post('/api/segments', authMiddleware, (req, res) => {
+app.post('/api/segments', (req, res) => {
   const seg = req.body
   if (!seg?.id || !seg?.lectureId) {
     return res.status(400).json({ error: 'id and lectureId required' })
@@ -81,7 +71,7 @@ app.post('/api/segments', authMiddleware, (req, res) => {
   res.status(201).json({ ok: true })
 })
 
-app.patch('/api/segments/:id', authMiddleware, (req, res) => {
+app.patch('/api/segments/:id', (req, res) => {
   const patch = req.body
   patchSegment(req.params.id, patch)
   if (patch.completedAt !== undefined && patch.courseId) {
@@ -92,11 +82,11 @@ app.patch('/api/segments/:id', authMiddleware, (req, res) => {
 
 // ── Daily logs ────────────────────────────────────────────────────────────────
 
-app.get('/api/daily-logs', authMiddleware, (_req, res) => {
+app.get('/api/daily-logs', (_req, res) => {
   res.json(getDailyLogs())
 })
 
-app.post('/api/daily-logs', authMiddleware, (req, res) => {
+app.post('/api/daily-logs', (req, res) => {
   const log = req.body
   if (!log?.date) return res.status(400).json({ error: 'date required' })
   upsertDailyLog(log)
@@ -105,18 +95,18 @@ app.post('/api/daily-logs', authMiddleware, (req, res) => {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
-app.get('/api/settings', authMiddleware, (_req, res) => {
+app.get('/api/settings', (_req, res) => {
   res.json(getSettings())
 })
 
-app.put('/api/settings', authMiddleware, (req, res) => {
+app.put('/api/settings', (req, res) => {
   saveSettings(req.body)
   res.json({ ok: true })
 })
 
 // ── Summary (for ORDECK widget) ───────────────────────────────────────────────
 
-app.get('/api/summary', authMiddleware, (_req, res) => {
+app.get('/api/summary', (_req, res) => {
   const courses = getCourses()
   const segments = getSegments()
   const logs = getDailyLogs()
@@ -227,7 +217,7 @@ cron.schedule(NIGHTLY_CRON, () => {
 // it to the OCF Course format before inserting. The preprocessor can also POST
 // directly to /api/courses using --push-to; this endpoint is for raw manifests.
 
-app.post('/api/import-manifest', authMiddleware, (req, res) => {
+app.post('/api/import-manifest', (req, res) => {
   const manifest = req.body
   if (!manifest?.units || !Array.isArray(manifest.units)) {
     return res.status(400).json({ error: 'Invalid manifest: units array required' })
@@ -290,7 +280,7 @@ app.post('/api/import-manifest', authMiddleware, (req, res) => {
 
 // ── Manual trigger for nightly job ───────────────────────────────────────────
 
-app.post('/api/admin/run-nightly', authMiddleware, async (_req, res) => {
+app.post('/api/admin/run-nightly', async (_req, res) => {
   res.json({ ok: true, message: 'Nightly job started' })
   runNightlyJob().catch(e => console.error('[nightly] Error from manual trigger:', e))
 })
@@ -300,6 +290,6 @@ app.post('/api/admin/run-nightly', authMiddleware, async (_req, res) => {
 app.listen(PORT, () => {
   console.log(`[ocf-api] Running on port ${PORT}`)
   console.log(`[ocf-api] DB: ${process.env.DB_PATH ?? 'opencourseflow.db'}`)
-  console.log(`[ocf-api] Auth: ${JWT_SECRET ? 'JWT enabled' : 'open (no JWT_SECRET)'}`)
+  console.log(`[ocf-api] Auth: jkOS Auth RS256 (JKOS_AUTH_PUBLIC_KEY ${process.env.JKOS_AUTH_PUBLIC_KEY ? 'set' : 'MISSING'})`)
   console.log(`[ocf-api] Nightly cron: ${NIGHTLY_CRON}`)
 })
