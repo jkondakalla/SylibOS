@@ -30,7 +30,7 @@ services:
       PORT: "8004"
       DB_PATH: /data/sylibos.db
     volumes:
-      - /mnt/Luna/sylibos-data:/data
+      - /mnt/Luna/Backends/SylibOS-Data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
