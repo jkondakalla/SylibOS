@@ -2,6 +2,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import cron from 'node-cron'
+import { randomUUID } from 'crypto'
 import { jkosAuth } from './jkos-auth.js'
 import {
   getCourses, getCourse, insertCourse, deleteCourse,
@@ -13,6 +14,7 @@ import {
 import { generateSegmentContent } from './ai.js'
 
 const app = express()
+app.set('trust proxy', 1)
 const PORT = Number(process.env.PORT ?? 8004)
 const NIGHTLY_CRON = process.env.NIGHTLY_CRON ?? '0 2 * * *'
 const SHELL_URL = process.env.SHELL_URL ?? 'https://sylibos.jkos.net'
@@ -196,7 +198,7 @@ async function runNightlyJob() {
       const content = await generateSegmentContent(settings, lec.title, lec.content, lec.unit, lec.courseTitle)
 
       insertSegment({
-        id: Math.random().toString(36).slice(2, 10),
+        id: randomUUID(),
         userId: lec.userId,
         lectureId: lec.id,
         courseId: lec.courseId,
@@ -232,7 +234,7 @@ app.post('/api/import-manifest', (req, res) => {
     return res.status(400).json({ error: 'Invalid manifest: units array required' })
   }
 
-  const courseId = Math.random().toString(36).slice(2, 10)
+  const courseId = randomUUID()
   const lectures = []
   let order = 1
 
@@ -250,7 +252,7 @@ app.post('/api/import-manifest', (req, res) => {
       )
 
       lectures.push({
-        id:         Math.random().toString(36).slice(2, 10),
+        id:         randomUUID(),
         courseId,
         title:      session.title,
         unit:       unit.title,
