@@ -86,6 +86,13 @@ function mockContent(title) {
   }
 }
 
+function validateAiResponse(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('AI response is not an object')
+  if (!Array.isArray(parsed.quiz)) throw new Error('AI response missing quiz array')
+  if (!Array.isArray(parsed.tasks)) throw new Error('AI response missing tasks array')
+  return parsed
+}
+
 async function callOllama(url, model, title, content, unit, courseTitle) {
   const res = await fetch(`${url}/api/generate`, {
     method: 'POST',
@@ -99,7 +106,7 @@ async function callOllama(url, model, title, content, unit, courseTitle) {
   })
   if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`)
   const data = await res.json()
-  return JSON.parse(data.response)
+  return validateAiResponse(JSON.parse(data.response))
 }
 
 async function callLazuros(url, token, model, title, content, unit, courseTitle) {
@@ -118,7 +125,7 @@ async function callLazuros(url, token, model, title, content, unit, courseTitle)
   })
   if (!res.ok) throw new Error(`LazurOS HTTP ${res.status}`)
   const data = await res.json()
-  return JSON.parse(data.response)
+  return validateAiResponse(JSON.parse(data.response))
 }
 
 export async function generateSegmentContent(settings, lectureTitle, lectureContent, unit, courseTitle) {

@@ -7,7 +7,7 @@
 //   GET  /api/library/asset/:assetId  serve a PDF BLOB (register BEFORE auth; public)
 //
 // library.db is the canonical content master written by the Python ingest pipeline.
-// Its schema must match preprocessor/db.py SCHEMA_SQL. Reads are live: a `load` from
+// Its schema must match CourseProcessor/db.py SCHEMA_SQL. Reads are live: a `load` from
 // the pipeline is visible to the running API on the next query (SQLite WAL). If you
 // replace the db file wholesale, restart the API.
 
@@ -222,4 +222,108 @@ export function addCourseForUser({ lib, db }, userId, slug) {
 
 function safeLen(json) {
   try { return JSON.parse(json || '[]').length } catch { return 0 }
+}
+
+// ---- Manifest upload (admin only — write connection) -----------------------
+
+export function importManifestToLibrary(libraryDbPath, manifest) {
+  const { slug, meta, units = [], course_number, term, ocw_url,
+          layout_format, used_ai_split, schema_version } = manifest
+
+  if (!slug || !meta?.title || !Array.isArray(units) || units.length === 0) {
+    return { ok: false, error: 'Manifest missing required fields: slug, meta.title, units' }
+  }
+  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug)) {
+    return { ok: false, error: 'slug must be lowercase alphanumeric with hyphens' }
+  }
+
+  let lectureCount = 0
+  let hasVideo = false
+  for (const unit of units) {
+    for (const lec of unit.lectures ?? []) {
+      lectureCount++
+      if (safeLen(JSON.stringify(lec.videos ?? [])) > 0) hasVideo = true
+    }
+  }
+
+  const wdb = new Database(libraryDbPath)
+  wdb.pragma('journal_mode = WAL')
+  wdb.pragma('foreign_keys = ON')
+  wdb.exec(LIBRARY_SCHEMA_SQL)
+
+  try {
+    const tx = wdb.transaction(() => {
+      wdb.prepare(`
+        INSERT OR REPLACE INTO courses
+          (slug, title, description, instructor, subject, level, course_number,
+           term, ocw_url, layout_format, used_ai_split, schema_version,
+           tool_version, lecture_count, has_video, ingested_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run(
+        slug,
+        meta.title,
+        meta.description ?? '',
+        meta.instructor ?? '',
+        meta.subject ?? '',
+        meta.level ?? '',
+        course_number ?? '',
+        term ?? '',
+        ocw_url ?? null,
+        layout_format ?? 'manual',
+        used_ai_split ? 1 : 0,
+        schema_version ?? 1,
+        manifest.tool_version ?? null,
+        lectureCount,
+        hasVideo ? 1 : 0,
+        new Date().toISOString(),
+      )
+
+      // Delete stale units/lectures so an OR REPLACE on the course cascades cleanly
+      wdb.prepare('DELETE FROM units WHERE slug = ?').run(slug)
+
+      for (const unit of units) {
+        const unitId = randomUUID()
+        wdb.prepare(`
+          INSERT INTO units (id, slug, title, ord) VALUES (?,?,?,?)
+        `).run(unitId, slug, unit.title ?? '', unit.ord ?? 0)
+
+        for (const lec of unit.lectures ?? []) {
+          const lecId = randomUUID()
+          wdb.prepare(`
+            INSERT INTO lectures
+              (id, slug, unit_id, unit_title, section, title, ord, content, videos, resources)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+          `).run(
+            lecId,
+            slug,
+            unitId,
+            unit.title ?? '',
+            lec.section ?? null,
+            lec.title ?? '',
+            lec.ord ?? 0,
+            lec.content ?? '',
+            JSON.stringify(lec.videos ?? []),
+            JSON.stringify(lec.resources ?? []),
+          )
+        }
+      }
+    })
+    tx()
+    return { ok: true, slug, lectureCount }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  } finally {
+    wdb.close()
+  }
+}
+
+export function attachLibraryUploadRoute(app, libraryDbPath) {
+  app.post('/api/library/upload', (req, res) => {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+    const result = importManifestToLibrary(libraryDbPath, req.body)
+    if (!result.ok) return res.status(400).json({ error: result.error })
+    res.json(result)
+  })
 }

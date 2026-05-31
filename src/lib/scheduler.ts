@@ -13,14 +13,12 @@ export function getStreak(logs: DailyLog[], dailyGoal: number): number {
 
   for (let i = 0; i < 365; i++) {
     const key = d.toISOString().slice(0, 10)
-    // Allow today to count even if goal not met yet
-    if (key === today) {
-      d.setDate(d.getDate() - 1)
-      continue
-    }
     const log = logs.find(l => l.date === key)
     if (log && log.segmentIds.length >= dailyGoal) {
       streak++
+      d.setDate(d.getDate() - 1)
+    } else if (key === today) {
+      // Today's goal not yet met — skip without breaking the streak
       d.setDate(d.getDate() - 1)
     } else {
       break

@@ -13,7 +13,7 @@ import {
   getLecturesWithoutSegments,
 } from './db.js'
 import { generateSegmentContent } from './ai.js'
-import { openLibraryDb, attachLibraryAssetRoute, attachLibraryRoutes } from './library.js'
+import { openLibraryDb, attachLibraryAssetRoute, attachLibraryRoutes, attachLibraryUploadRoute } from './library.js'
 import { runLibraryMigrations } from './migrations.js'
 
 const app = express()
@@ -26,7 +26,8 @@ app.use(cors({ origin: SHELL_URL, credentials: true }))
 app.use(express.json({ limit: '20mb' }))
 app.use(cookieParser())
 
-const lib = openLibraryDb(process.env.LIBRARY_DB_PATH || '/data/library.db')
+const LIBRARY_DB_PATH = process.env.LIBRARY_DB_PATH || '/data/library.db'
+const lib = openLibraryDb(LIBRARY_DB_PATH)
 runLibraryMigrations(db)
 
 // ── Health (public — before auth middleware) ───────────────────────────────────
@@ -50,9 +51,10 @@ app.use(authMiddleware)
 // ── Library catalog/preview/add routes (authenticated) ───────────────────────
 
 attachLibraryRoutes(app, { lib, db })
+attachLibraryUploadRoute(app, LIBRARY_DB_PATH)
 
 app.get('/api/auth/me', (req, res) => {
-  const { sub, iat, exp, ...rest } = req.user
+  const { sub, iat, exp, iss, ...rest } = req.user
   res.json({ user: { id: String(sub), ...rest } })
 })
 
@@ -103,7 +105,7 @@ app.patch('/api/segments/:id', (req, res) => {
   const userId = String(req.user.sub)
   const patch = req.body
   patchSegment(req.params.id, userId, patch)
-  if (patch.completedAt !== undefined && patch.courseId) {
+  if (patch.completedAt && patch.courseId) {
     updateCourseCompletedSegments(patch.courseId, userId, 1)
   }
   res.json({ ok: true })
@@ -118,6 +120,7 @@ app.get('/api/daily-logs', (req, res) => {
 app.post('/api/daily-logs', (req, res) => {
   const log = req.body
   if (!log?.date) return res.status(400).json({ error: 'date required' })
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(log.date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
   upsertDailyLog(String(req.user.sub), log)
   res.status(201).json({ ok: true })
 })
@@ -196,43 +199,54 @@ app.get('/api/summary', (req, res) => {
 
 // ── Nightly job ───────────────────────────────────────────────────────────────
 
-async function runNightlyJob() {
-  const lectures = getLecturesWithoutSegments()
+let _nightlyRunning = false
 
-  if (lectures.length === 0) {
-    console.log('[nightly] No unprocessed lectures found.')
+async function runNightlyJob() {
+  if (_nightlyRunning) {
+    console.log('[nightly] Already running — skipping.')
     return
   }
+  _nightlyRunning = true
+  try {
+    const lectures = getLecturesWithoutSegments()
 
-  console.log(`[nightly] Processing ${lectures.length} lectures…`)
-
-  let ok = 0, fail = 0
-  for (const lec of lectures) {
-    try {
-      const settings = getSettings(lec.userId)
-      const content = await generateSegmentContent(settings, lec.title, lec.content, lec.unit, lec.courseTitle)
-
-      insertSegment({
-        id: randomUUID(),
-        userId: lec.userId,
-        lectureId: lec.id,
-        courseId: lec.courseId,
-        lectureTitle: lec.title,
-        courseTitle: lec.courseTitle,
-        unit: lec.unit,
-        section: lec.section,
-        generatedAt: Date.now(),
-        quiz: content.quiz,
-        tasks: content.tasks,
-      })
-      ok++
-    } catch (e) {
-      console.error(`[nightly] Failed for "${lec.title}":`, e.message)
-      fail++
+    if (lectures.length === 0) {
+      console.log('[nightly] No unprocessed lectures found.')
+      return
     }
-  }
 
-  console.log(`[nightly] Done — ${ok} generated, ${fail} failed.`)
+    console.log(`[nightly] Processing ${lectures.length} lectures…`)
+
+    let ok = 0, fail = 0
+    for (const lec of lectures) {
+      try {
+        const settings = getSettings(lec.userId)
+        const content = await generateSegmentContent(settings, lec.title, lec.content, lec.unit, lec.courseTitle)
+
+        insertSegment({
+          id: randomUUID(),
+          userId: lec.userId,
+          lectureId: lec.id,
+          courseId: lec.courseId,
+          lectureTitle: lec.title,
+          courseTitle: lec.courseTitle,
+          unit: lec.unit,
+          section: lec.section,
+          generatedAt: Date.now(),
+          quiz: content.quiz,
+          tasks: content.tasks,
+        })
+        ok++
+      } catch (e) {
+        console.error(`[nightly] Failed for "${lec.title}":`, e.message)
+        fail++
+      }
+    }
+
+    console.log(`[nightly] Done — ${ok} generated, ${fail} failed.`)
+  } finally {
+    _nightlyRunning = false
+  }
 }
 
 cron.schedule(NIGHTLY_CRON, () => {
@@ -254,7 +268,7 @@ app.post('/api/import-manifest', (req, res) => {
   let order = 1
 
   for (const unit of manifest.units) {
-    for (const session of unit.sessions) {
+    for (const session of (unit.sessions ?? [])) {
       if (session.is_assessment) continue
 
       const parts = [session.overview ?? '']
@@ -305,7 +319,8 @@ app.post('/api/import-manifest', (req, res) => {
 
 // ── Manual trigger for nightly job ───────────────────────────────────────────
 
-app.post('/api/admin/run-nightly', async (_req, res) => {
+app.post('/api/admin/run-nightly', async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' })
   res.json({ ok: true, message: 'Nightly job started' })
   runNightlyJob().catch(e => console.error('[nightly] Error from manual trigger:', e))
 })

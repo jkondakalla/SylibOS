@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
 import { db } from '../lib/db'
@@ -249,6 +249,7 @@ export default function Lesson() {
   })
 
   const [quizScore, setQuizScore] = useState(0)
+  const completing = useRef(false)
 
   useEffect(() => { if (!seg) navigate('/') }, [seg, navigate])
 
@@ -283,7 +284,10 @@ export default function Lesson() {
 
   const finish = useCallback((then: 'course' | 'next') => {
     if (!seg) return
-    if (!seg.completedAt) completeSegment(seg.id, quizScore)
+    if (!seg.completedAt && !completing.current) {
+      completing.current = true
+      completeSegment(seg.id, quizScore)
+    }
     if (then === 'next' && nextSegId) navigate(`/lesson/${nextSegId}`)
     else navigate(`/course/${seg.courseId}`)
   }, [seg, quizScore, completeSegment, navigate, nextSegId])

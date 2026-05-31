@@ -29,6 +29,7 @@ services:
     environment:
       PORT: "8004"
       DB_PATH: /data/sylibos.db
+      LIBRARY_DB_PATH: /data/library.db
     volumes:
       - ${SYLIBOS_DATA_PATH:-/mnt/Luna/Backends/SylibOS-Data}:/data
     extra_hosts:

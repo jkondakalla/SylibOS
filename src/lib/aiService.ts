@@ -156,10 +156,17 @@ export interface LessonContent {
   tasks: Task[]
 }
 
-const LESSON_PROMPT = (title: string, content: string) => `\
+const LESSON_PROMPT = (title: string, content: string, unit?: string, courseTitle?: string) => {
+  const contextLines = [
+    courseTitle ? `Course: "${courseTitle}"` : '',
+    unit        ? `Unit: "${unit}"`          : '',
+    `Lecture: "${title}"`,
+  ].filter(Boolean).join('\n')
+
+  return `\
 You are an educational assistant. Based on the following lecture content, generate a structured JSON response.
 
-Lecture: "${title}"
+${contextLines}
 
 Content:
 ${content.slice(0, 4000)}
@@ -188,19 +195,22 @@ Rules:
 - Quiz questions should test understanding, not trivia
 - Tasks should be actionable in ~2 minutes
 - correctIndex is 0-based (0=A, 1=B, 2=C, 3=D)`
+}
 
 async function callOllama(
   ollamaUrl: string,
   model: string,
   title: string,
   content: string,
+  unit?: string,
+  courseTitle?: string,
 ): Promise<LessonContent> {
   const response = await fetch(`${ollamaUrl}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      prompt: LESSON_PROMPT(title, content),
+      prompt: LESSON_PROMPT(title, content, unit, courseTitle),
       stream: false,
       format: 'json',
     }),
@@ -216,6 +226,8 @@ async function callLazuros(
   model: string,
   title: string,
   content: string,
+  unit?: string,
+  courseTitle?: string,
 ): Promise<LessonContent> {
   const response = await fetch(`${lazurosUrl}/api/generate`, {
     method: 'POST',
@@ -225,7 +237,7 @@ async function callLazuros(
     },
     body: JSON.stringify({
       model,
-      prompt: LESSON_PROMPT(title, content),
+      prompt: LESSON_PROMPT(title, content, unit, courseTitle),
       stream: false,
       format: 'json',
     }),
@@ -239,12 +251,14 @@ async function callClaude(
   apiKey: string,
   title: string,
   content: string,
+  unit?: string,
+  courseTitle?: string,
 ): Promise<LessonContent> {
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1024,
-    messages: [{ role: 'user', content: LESSON_PROMPT(title, content) }],
+    messages: [{ role: 'user', content: LESSON_PROMPT(title, content, unit, courseTitle) }],
   })
   const text = message.content[0].type === 'text' ? message.content[0].text : ''
   const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -297,15 +311,23 @@ export async function generateLessonContent(
   settings: AppSettings,
   lectureTitle: string,
   lectureContent: string,
+  unit?: string,
+  courseTitle?: string,
 ): Promise<LessonContent> {
   if (settings.aiProvider === 'lazuros' && settings.lazurosUrl) {
-    return callLazuros(settings.lazurosUrl, settings.lazurosToken, settings.ollamaModel, lectureTitle, lectureContent)
+    try {
+      return await callLazuros(settings.lazurosUrl, settings.lazurosToken, settings.ollamaModel, lectureTitle, lectureContent, unit, courseTitle)
+    } catch { /* fall through to next provider */ }
   }
   if (settings.aiProvider === 'ollama') {
-    return callOllama(settings.ollamaUrl, settings.ollamaModel, lectureTitle, lectureContent)
+    try {
+      return await callOllama(settings.ollamaUrl, settings.ollamaModel, lectureTitle, lectureContent, unit, courseTitle)
+    } catch { /* fall through to mock */ }
   }
   if (settings.aiProvider === 'claude' && settings.claudeApiKey) {
-    return callClaude(settings.claudeApiKey, lectureTitle, lectureContent)
+    try {
+      return await callClaude(settings.claudeApiKey, lectureTitle, lectureContent, unit, courseTitle)
+    } catch { /* fall through to mock */ }
   }
   return mockLessonContent(lectureTitle)
 }

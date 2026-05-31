@@ -70,3 +70,17 @@ export async function addLibraryCourse(slug: string): Promise<AddCourseResult> {
     method: 'POST',
   })
 }
+
+// ---- Upload (admin only) ---------------------------------------------------
+
+export interface UploadManifestResult {
+  slug: string
+  lectureCount: number
+}
+
+export async function uploadCourseManifest(manifest: unknown): Promise<UploadManifestResult> {
+  return call<UploadManifestResult>('/api/library/upload', {
+    method: 'POST',
+    body: JSON.stringify(manifest),
+  })
+}

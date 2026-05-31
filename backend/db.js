@@ -173,7 +173,7 @@ export function getSegments(userId) {
 
 export function insertSegment(seg) {
   db.prepare(`
-    INSERT OR REPLACE INTO segments
+    INSERT OR IGNORE INTO segments
       (id, user_id, lecture_id, course_id, lecture_title, course_title, unit, section, generated_at, quiz, tasks, completed_at, quiz_score)
     VALUES
       (@id, @user_id, @lecture_id, @course_id, @lecture_title, @course_title, @unit, @section, @generated_at, @quiz, @tasks, @completed_at, @quiz_score)
@@ -193,11 +193,13 @@ export function insertSegment(seg) {
     quiz_score: seg.quizScore ?? null,
   })
 
-  db.prepare('UPDATE lectures SET has_segment = 1, segment_id = ? WHERE id = ?')
-    .run(seg.id, seg.lectureId)
+  db.prepare(`
+    UPDATE lectures SET has_segment = 1, segment_id = ?
+    WHERE id = ? AND course_id IN (SELECT id FROM courses WHERE user_id = ?)
+  `).run(seg.id, seg.lectureId, seg.userId)
 }
 
-export function patchSegment(id, userId, patch) {
+export const patchSegment = db.transaction((id, userId, patch) => {
   if (patch.completedAt !== undefined) {
     db.prepare('UPDATE segments SET completed_at = ?, quiz_score = ? WHERE id = ? AND user_id = ?')
       .run(patch.completedAt, patch.quizScore ?? null, id, userId)
@@ -206,7 +208,7 @@ export function patchSegment(id, userId, patch) {
     db.prepare('UPDATE segments SET quiz = ?, tasks = ? WHERE id = ? AND user_id = ?')
       .run(JSON.stringify(patch.quiz), JSON.stringify(patch.tasks ?? []), id, userId)
   }
-}
+})
 
 export function updateCourseCompletedSegments(courseId, userId, delta) {
   db.prepare('UPDATE courses SET completed_segments = completed_segments + ? WHERE id = ? AND user_id = ?')
@@ -249,6 +251,13 @@ export function saveSettings(userId, settings) {
 // ── Normalise DB rows to frontend shape ───────────────────────────────────────
 
 function normLecture(r) {
+  let videoUrl = r.video_url ?? undefined
+  if (!videoUrl && r.videos) {
+    try {
+      const vids = JSON.parse(r.videos)
+      if (Array.isArray(vids) && vids[0]?.url) videoUrl = vids[0].url
+    } catch {}
+  }
   return {
     id: r.id,
     courseId: r.course_id,
@@ -257,7 +266,7 @@ function normLecture(r) {
     section: r.section ?? undefined,
     order: r.ord,
     content: r.content,
-    videoUrl: r.video_url ?? undefined,
+    videoUrl,
     hasSegment: r.has_segment === 1,
     segmentId: r.segment_id ?? undefined,
   }

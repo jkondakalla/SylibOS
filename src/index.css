@@ -424,3 +424,55 @@ input[type="range"] { accent-color: var(--color-accent); }
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+/* Library header row (title + admin upload button) */
+.library-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Upload area */
+.library-upload-area {
+  margin: 1.25rem 0;
+}
+.library-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.library-upload-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border: 1.5px dashed var(--color-line);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.library-upload-label:hover,
+.library-upload-label.has-file {
+  border-color: var(--color-accent);
+  color: var(--color-accent-ink);
+  background: var(--color-accent-soft);
+}
+.library-upload-feedback {
+  font-size: 0.8125rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+}
+.library-upload-success {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent-ink);
+}
+.library-upload-error {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #ef4444;
+}

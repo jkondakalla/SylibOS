@@ -102,10 +102,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   completeSegment: (segmentId, quizScore) => {
+    const existing = get().segments[segmentId]
+    if (!existing || existing.completedAt) return
     const now = Date.now()
     const segments = {
       ...get().segments,
-      [segmentId]: { ...get().segments[segmentId], completedAt: now, quizScore },
+      [segmentId]: { ...existing, completedAt: now, quizScore },
     }
 
     const seg = segments[segmentId]

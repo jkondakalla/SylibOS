@@ -19,9 +19,12 @@ function wordCount(s: string): number {
 }
 
 function splitSentences(text: string): string[] {
+  // \x01 is a placeholder for dots that must not trigger sentence splitting.
+  // Replace the TRAILING dot of abbreviations (e.g. "Dr." → "Dr\x01", "e.g." → "e.g\x01")
+  // and decimal separators, then restore after splitting.
   const protectedText = text
-    .replace(/\b(Dr|Mr|Mrs|Ms|Prof|vs|etc|e\.g|i\.e|Fig|Eq|No|St)\./gi, m => m.replace('.', ''))
-    .replace(/(\d)\.(\d)/g, '$1$2')
+    .replace(/\b(Dr|Mr|Mrs|Ms|Prof|vs|etc|e\.g|i\.e|Fig|Eq|No|St)\./gi, m => m.slice(0, -1) + '')
+    .replace(/(\d)\.(\d)/g, (_, d1, d2) => d1 + '' + d2)
   const parts = protectedText.split(/(?<=[.!?])["')\]]?\s+(?=[A-Z(0-9"'])/)
   return parts
     .map(p => p.replace(//g, '.').trim())

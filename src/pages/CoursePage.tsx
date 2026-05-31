@@ -60,7 +60,7 @@ export default function CoursePage() {
         const lec = course.lectures.find(l => l.id === lecId)
         if (!lec || lec.segmentId) continue
         try {
-          const content = await generateLessonContent(settings, lec.title, lec.content)
+          const content = await generateLessonContent(settings, lec.title, lec.content, lec.unit, course.title)
           addSegment({
             id: randomId(), lectureId: lec.id, courseId: course.id,
             lectureTitle: lec.title, courseTitle: course.title,

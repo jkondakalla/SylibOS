@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../store/appStore'
+import { useAuthStore } from '../store/authStore'
 import { api } from '../lib/api'
 import { db } from '../lib/db'
 import { useTheme } from '../lib/theme'
@@ -35,6 +36,7 @@ function SettingCard({ icon, title, desc, children }: {
 export default function Settings() {
   const { settings, updateSettings } = useAppStore()
   const { theme, setTheme } = useTheme()
+  const role = useAuthStore(s => s.user?.role)
   const [saved, setSaved] = useState(false)
   const [running, setRunning] = useState(false)
   const [jobResult, setJobResult] = useState<string | null>(null)
@@ -128,7 +130,7 @@ export default function Settings() {
             )}
           </div>
 
-          {settings.aiProvider !== 'none' && (
+          {settings.aiProvider !== 'none' && role === 'admin' && (
             <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-5">
               <Button variant="soft" size="sm" disabled={running}
                 icon={running ? <Icon name="clock" size={14} /> : <Icon name="lightning" size={14} />}

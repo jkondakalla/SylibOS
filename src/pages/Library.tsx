@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, EmptyState, Icon, Spinner } from '../components/ui'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
+import { useAuthStore } from '../store/authStore'
 import {
   addLibraryCourse,
   getLibraryCourse,
+  uploadCourseManifest,
   LibraryCourse,
   LibraryCoursePreview,
   listLibrary,
@@ -15,19 +17,23 @@ import {
 // ---------------------------------------------------------------------------
 
 export default function Library() {
+  const { user } = useAuthStore()
   const [courses, setCourses] = useState<LibraryCourse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [subject, setSubject] = useState<string>('All')
   const [preview, setPreview] = useState<string | null>(null)
+  const [showUpload, setShowUpload] = useState(false)
 
-  useEffect(() => {
+  const reload = () => {
     setLoading(true)
     listLibrary()
       .then(setCourses)
       .catch(e => setError(e.message ?? 'Failed to load library'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { reload() }, [])
 
   const subjects = ['All', ...Array.from(new Set(courses.map(c => c.subject).filter(Boolean))).sort()]
   const filtered = subject === 'All' ? courses : courses.filter(c => c.subject === subject)
@@ -36,16 +42,27 @@ export default function Library() {
     setCourses(prev => prev.map(c => c.slug === slug ? { ...c, added: true } : c))
   }
 
+  const isAdmin = user?.role === 'admin'
+
   if (loading) return <CenteredSpinner />
   if (error) return <PageError message={error} />
 
   return (
     <div className="library-page">
       <header className="library-header">
-        <h1 className="library-title">Course Library</h1>
-        <p className="library-subtitle">
-          Add a course to your learning plan to begin studying with daily quizzes and reading slices.
-        </p>
+        <div className="library-header-row">
+          <div>
+            <h1 className="library-title">Course Library</h1>
+            <p className="library-subtitle">
+              Add a course to your learning plan to begin studying with daily quizzes and reading slices.
+            </p>
+          </div>
+          {isAdmin && (
+            <Button variant="ghost" size="sm" onClick={() => setShowUpload(true)}>
+              <Icon name="upload" size={14} /> Upload Course
+            </Button>
+          )}
+        </div>
       </header>
 
       <SubjectFilter subjects={subjects} active={subject} onChange={setSubject} />
@@ -54,7 +71,9 @@ export default function Library() {
         <EmptyState
           icon="book"
           title="No courses here yet"
-          body="Check back after more courses have been ingested, or clear the subject filter."
+          body={isAdmin
+            ? 'Upload a course manifest using the button above, or run CourseProcessor to ingest a ZIP.'
+            : 'Check back after more courses have been ingested, or clear the subject filter.'}
         />
       ) : (
         <div className="library-grid">
@@ -75,6 +94,13 @@ export default function Library() {
           isAdded={courses.find(c => c.slug === preview)?.added ?? false}
           onClose={() => setPreview(null)}
           onAdded={markAdded}
+        />
+      )}
+
+      {showUpload && (
+        <UploadModal
+          onClose={() => setShowUpload(false)}
+          onUploaded={() => { setShowUpload(false); reload() }}
         />
       )}
     </div>
@@ -187,14 +213,16 @@ function PreviewModal({
   const hydrate = useAppStore(s => s.hydrate)
   const [data, setData] = useState<LibraryCoursePreview | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const backdropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setLoading(true)
+    setFetchError(null)
     getLibraryCourse(slug)
       .then(setData)
-      .catch(() => setData(null))
+      .catch(e => { setData(null); setFetchError(e?.message ?? 'Failed to load preview') })
       .finally(() => setLoading(false))
   }, [slug])
 
@@ -235,7 +263,7 @@ function PreviewModal({
         {loading && <CenteredSpinner />}
 
         {!loading && !data && (
-          <p className="library-modal-error">Could not load course preview.</p>
+          <p className="library-modal-error">{fetchError ?? 'Could not load course preview.'}</p>
         )}
 
         {!loading && data && (
@@ -309,4 +337,112 @@ function PageError({ message }: { message: string }) {
 function truncate(text: string, max: number) {
   if (text.length <= max) return text
   return text.slice(0, max).replace(/\s\S*$/, '') + '...'
+}
+
+// ---------------------------------------------------------------------------
+// Upload modal (admin only)
+// ---------------------------------------------------------------------------
+
+function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const backdropRef = useRef<HTMLDivElement>(null)
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+  const [fileName, setFileName] = useState('')
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const handleFileChange = () => {
+    const f = fileRef.current?.files?.[0]
+    setFileName(f?.name ?? '')
+    setStatus('idle')
+    setMessage('')
+  }
+
+  const handleUpload = async () => {
+    const file = fileRef.current?.files?.[0]
+    if (!file) return
+    setStatus('uploading')
+    setMessage('')
+    try {
+      const text = await file.text()
+      const manifest = JSON.parse(text)
+      const result = await uploadCourseManifest(manifest)
+      setStatus('done')
+      setMessage(`"${manifest.meta?.title ?? result.slug}" uploaded — ${result.lectureCount} lecture${result.lectureCount !== 1 ? 's' : ''} added to the catalog.`)
+    } catch (e: any) {
+      setStatus('error')
+      setMessage(e.message ?? 'Upload failed')
+    }
+  }
+
+  return (
+    <div
+      ref={backdropRef}
+      className="library-modal-backdrop"
+      onClick={e => e.target === backdropRef.current && onClose()}
+      role="dialog"
+      aria-modal
+      aria-label="Upload course manifest"
+    >
+      <div className="library-modal">
+        <button className="library-modal-close" onClick={onClose} aria-label="Close">
+          <Icon name="x" size={18} />
+        </button>
+
+        <div className="library-modal-header">
+          <h2 className="library-modal-title">Upload Course Manifest</h2>
+          <p className="library-modal-sub">
+            Select a <code>.json</code> file produced by CourseProcessor or hand-authored from{' '}
+            <code>CourseProcessor/TEMPLATE.manifest.json</code>.
+          </p>
+        </div>
+
+        <div className="library-upload-area">
+          <label htmlFor="manifest-upload" className={`library-upload-label${fileName ? ' has-file' : ''}`}>
+            <Icon name={fileName ? 'layers' : 'upload'} size={20} />
+            <span>{fileName || 'Choose manifest .json'}</span>
+          </label>
+          <input
+            ref={fileRef}
+            id="manifest-upload"
+            type="file"
+            accept=".json,application/json"
+            className="library-upload-input"
+            onChange={handleFileChange}
+          />
+        </div>
+
+        {status === 'done' && (
+          <p className="library-upload-feedback library-upload-success">{message}</p>
+        )}
+        {status === 'error' && (
+          <p className="library-upload-feedback library-upload-error">{message}</p>
+        )}
+
+        <div className="library-modal-actions">
+          {status === 'done' ? (
+            <Button variant="primary" size="sm" onClick={onUploaded}>Done</Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleUpload}
+                disabled={!fileName || status === 'uploading'}
+              >
+                {status === 'uploading' ? <Spinner size={14} /> : <Icon name="upload" size={14} />}
+                {status === 'uploading' ? 'Uploading…' : 'Upload'}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }

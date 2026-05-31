@@ -13,19 +13,24 @@ export const useAuthStore = create<AuthStore>((set) => ({
   status: 'loading',
 
   init: async () => {
-    let user = await getMe()
+    try {
+      let user = await getMe()
 
-    if (!user) {
-      const refreshed = await refreshToken()
-      if (refreshed) user = await getMe()
-    }
+      if (!user) {
+        const refreshed = await refreshToken()
+        if (refreshed) user = await getMe()
+      }
 
-    if (!user) {
+      if (!user) {
+        set({ status: 'unauthenticated' })
+        redirectToLogin()
+        return
+      }
+
+      set({ user, status: 'ready' })
+    } catch {
       set({ status: 'unauthenticated' })
       redirectToLogin()
-      return
     }
-
-    set({ user, status: 'ready' })
   },
 }))

@@ -21,10 +21,5 @@ export function runLibraryMigrations(db) {
   addColumn(`ALTER TABLE lectures ADD COLUMN resources TEXT NOT NULL DEFAULT '[]'`)
 
   // Speeds up the "already added?" lookup and the catalog `added` annotation.
-  try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_courses_user_source
-             ON courses(user_id, source_slug)`)
-  } catch (e) {
-    throw e
-  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_courses_user_source ON courses(user_id, source_slug)`)
 }
