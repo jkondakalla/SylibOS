@@ -8,11 +8,20 @@
     <meta name="theme-color" content="#0e7c66" />
     <title>SylibOS</title>
 
-    <!-- Apply saved theme before paint to avoid a flash of the wrong theme -->
+    <!-- Apply saved scheme before paint to avoid a theme/accent flash -->
     <script>
       try {
+        var SCHEME_MAP = {
+          "reading-room": { theme: "light", accent: "#0e7c66" },
+          "sandstone":    { theme: "light", accent: "#b8543a" },
+          "nocturne":     { theme: "dark",  accent: "#0e7c66" },
+          "velvet":       { theme: "dark",  accent: "#7c3aed" }
+        };
         var s = JSON.parse(localStorage.getItem('sylibos:settings') || '{}');
-        document.documentElement.setAttribute('data-theme', s.theme === 'dark' ? 'dark' : 'light');
+        var schemeId = s.scheme || (s.theme === 'dark' ? 'nocturne' : 'reading-room');
+        var scheme = SCHEME_MAP[schemeId] || SCHEME_MAP['nocturne'];
+        document.documentElement.setAttribute('data-theme', scheme.theme);
+        document.documentElement.style.setProperty('--accent-base', scheme.accent);
       } catch (e) {}
     </script>
 

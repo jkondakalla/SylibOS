@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lazurosToken: '',
   aiProvider: 'none',
   theme: 'dark',
+  scheme: 'nocturne',
 }
 
 interface AppState {

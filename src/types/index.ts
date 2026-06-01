@@ -55,6 +55,8 @@ export interface DailyLog {
   segmentIds: string[]
 }
 
+export type SchemeId = 'reading-room' | 'sandstone' | 'nocturne' | 'velvet'
+
 export interface AppSettings {
   dailyGoal: number
   ollamaUrl: string
@@ -64,6 +66,7 @@ export interface AppSettings {
   lazurosToken: string
   aiProvider: 'lazuros' | 'ollama' | 'claude' | 'none'
   theme: 'dark' | 'light'
+  scheme: SchemeId
 }
 
 export type AIProvider = 'lazuros' | 'ollama' | 'claude' | 'none'

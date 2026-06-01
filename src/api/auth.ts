@@ -35,3 +35,33 @@ export async function logout(): Promise<void> {
   await fetch(`${AUTH_URL}/auth/logout`, { method: 'POST', credentials: 'include' })
   window.location.href = `${AUTH_URL}/auth/login`
 }
+
+// ── Cross-app profile / preferences (auth.jkos.net) ──────────────────────────
+
+export interface UserPreferences {
+  scheme?: string
+}
+
+export interface AuthProfile {
+  user: JkosUser
+  preferences: UserPreferences
+}
+
+export async function getAuthProfile(): Promise<AuthProfile> {
+  const res = await fetch(`${AUTH_URL}/auth/profile`, { credentials: 'include' })
+  if (!res.ok) throw new Error('Profile fetch failed')
+  return res.json()
+}
+
+export async function patchAuthProfile(
+  patch: { name?: string; avatar_url?: string | null; preferences?: UserPreferences },
+): Promise<void> {
+  await fetch(`${AUTH_URL}/auth/profile`, {
+    method:      'PATCH',
+    credentials: 'include',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify(patch),
+  })
+}
+
+export { AUTH_URL }

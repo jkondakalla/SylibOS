@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../lib/api'
 import { db } from '../lib/db'
-import { useTheme } from '../lib/theme'
+import { useTheme, SCHEMES, type Scheme, type SchemeId } from '../lib/theme'
 import { Card, Button, Icon, Field, Input, Segmented, cx } from '../components/ui'
 import type { AIProvider } from '../types'
 
@@ -33,9 +33,47 @@ function SettingCard({ icon, title, desc, children }: {
   )
 }
 
+function schemePreviewVars(s: Scheme): React.CSSProperties {
+  const dark = s.theme === 'dark'
+  return {
+    '--sc-paper':    dark ? '#121318' : '#fbfaf7',
+    '--sc-card':     dark ? '#1b1d24' : '#ffffff',
+    '--sc-ink':      dark ? '#eceae3' : '#211c16',
+    '--sc-blend':    dark ? 'screen'  : 'multiply',
+    '--sc-accent':   dark ? `color-mix(in oklab, ${s.accent} 62%, #fff)` : s.accent,
+    '--sc-on-accent': dark ? '#121318' : '#ffffff',
+  } as React.CSSProperties
+}
+
+function SchemeChip({ scheme, active, onPick }: { scheme: Scheme; active: boolean; onPick: (id: SchemeId) => void }) {
+  return (
+    <button
+      className={`scheme-chip${active ? ' active' : ''}`}
+      style={schemePreviewVars(scheme)}
+      onClick={() => onPick(scheme.id)}
+      aria-pressed={active}
+    >
+      <span className="scheme-swatch">
+        <span className="scheme-lines"><i /><i /><i /></span>
+        <span className="scheme-chiprow">
+          <span className="scheme-pill"><span /></span>
+          <span className="scheme-card-dot" />
+        </span>
+      </span>
+      <span className="scheme-foot">
+        <span className="scheme-name">{scheme.name}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+          <span className="scheme-mode">{scheme.theme}</span>
+          <span className="scheme-check"><Icon name="check" size={11} strokeWidth={2.5} /></span>
+        </span>
+      </span>
+    </button>
+  )
+}
+
 export default function Settings() {
   const { settings, updateSettings } = useAppStore()
-  const { theme, setTheme } = useTheme()
+  const { scheme, setScheme } = useTheme()
   const role = useAuthStore(s => s.user?.role)
   const [saved, setSaved] = useState(false)
   const [running, setRunning] = useState(false)
@@ -60,12 +98,12 @@ export default function Settings() {
       </header>
 
       <div className="space-y-4">
-        <SettingCard icon="sun" title="Appearance" desc="Light is calmer for daytime reading; dark for low light.">
-          <Segmented<'light' | 'dark'>
-            value={theme}
-            onChange={setTheme}
-            options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]}
-          />
+        <SettingCard icon="sun" title="Appearance" desc="Four premade colour schemes — two light, two dark. Each pairs a paper tone with a tuned accent. Change applies instantly.">
+          <div className="scheme-grid">
+            {SCHEMES.map(s => (
+              <SchemeChip key={s.id} scheme={s} active={scheme === s.id} onPick={setScheme} />
+            ))}
+          </div>
         </SettingCard>
 
         <SettingCard icon="target" title="Daily goal" desc="How many lessons you aim to finish each day.">

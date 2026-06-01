@@ -21,6 +21,7 @@ type IconName =
   | 'chevron' | 'check' | 'flame' | 'book' | 'upload' | 'settings' | 'sun' | 'moon'
   | 'play' | 'pause' | 'arrow-right' | 'arrow-left' | 'x' | 'sparkles' | 'layers'
   | 'clock' | 'trash' | 'target' | 'logout' | 'plus' | 'cap' | 'dot' | 'lightning'
+  | 'search' | 'film' | 'image'
 
 const PATHS: Record<IconName, React.ReactNode> = {
   chevron: <path d="M9 6l6 6-6 6" />,
@@ -46,6 +47,9 @@ const PATHS: Record<IconName, React.ReactNode> = {
   cap: <><path d="M3 9l9-4 9 4-9 4z" /><path d="M7 11v4c0 1 2.2 2.5 5 2.5s5-1.5 5-2.5v-4" /></>,
   dot: <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />,
   lightning: <path d="M13 2L4 14h6l-1 8 9-12h-6z" />,
+  search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
+  film: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 4v16M17 4v16M3 9h4M17 9h4M3 15h4M17 15h4" /></>,
+  image: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></>,
 }
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.75 }: {

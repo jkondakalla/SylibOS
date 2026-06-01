@@ -3,14 +3,20 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
 import { useAuthStore } from '../store/authStore'
 import { useTheme } from '../lib/theme'
-import { logout } from '../api/auth'
 import { Bar, Icon, Spinner, ThemeToggle, cx } from './ui'
+import { ProfileMenu } from './ProfileMenu'
 
 const NAV = [
   { to: '/', label: 'Today', icon: 'book', end: true },
   { to: '/library', label: 'Library', icon: 'layers', end: false },
   { to: '/settings', label: 'Settings', icon: 'settings', end: false },
 ] as const
+
+function initials(name?: string | null, email?: string | null): string {
+  const src = (name || email || '?').trim()
+  const parts = src.split(/[\s@.]+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || src[0].toUpperCase()
+}
 
 function Brand() {
   return (
@@ -55,7 +61,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-50 border-b border-line bg-paper/85 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-line bg-paper/85 backdrop-blur-xl papered">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
           <Brand />
 
@@ -88,10 +94,7 @@ export default function Layout() {
                 {initials(user?.name, user?.email)}
               </span>
             </div>
-            <button onClick={logout} title="Sign out" aria-label="Sign out"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line text-faint transition hover:text-danger hover:border-danger/40 active:scale-95">
-              <Icon name="logout" size={16} />
-            </button>
+            <ProfileMenu user={user} />
           </div>
         </div>
       </header>
