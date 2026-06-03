@@ -1,3 +1,4 @@
+name: jkos-prod-sylibos
 # SylibOS — standalone deployment
 # Frontend SPA (nginx:alpine) + Node.js API on a shared bridge network.
 # The standalone-nginx container joins sylibos-net to proxy:
