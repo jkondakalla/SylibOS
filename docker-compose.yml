@@ -1,29 +1,17 @@
-# SylibOS — standalone deployment
-# Frontend SPA (nginx:alpine) + Node.js API on a shared bridge network.
-# The standalone-nginx container joins sylibos-net to proxy:
-#   sylibos.jkos.net/       → sylibos-frontend:80
-#   sylibos.jkos.net/api/   → sylibos-api:8004
-#   sylibos.jkos.net/health → sylibos-api:8004
-#
-# First run:
-#   cp .env.example .env && nano .env   # fill secrets
-#   docker compose up -d --build
-#   # Then open the app, go to Settings, set AI provider + LazurOS details.
-
 services:
   sylibos-frontend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: sylibos-frontend
+    container_name: staging-sylibos-frontend
     restart: unless-stopped
     networks:
       - sylibos-net
-
+      - nginx-staging-proxy
   sylibos-api:
     build:
       context: ./backend
-    container_name: sylibos-api
+    container_name: staging-sylibos-api
     restart: unless-stopped
     env_file: .env
     environment:
@@ -31,12 +19,15 @@ services:
       DB_PATH: /data/sylibos.db
       LIBRARY_DB_PATH: /data/library.db
     volumes:
-      - ${SYLIBOS_DATA_PATH:-/mnt/Luna/Backends/SylibOS-Data}:/data
+      - ${SYLIBOS_DATA_PATH:-/mnt/Luna/Backends-Staging/SylibOS-Data}:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - sylibos-net
-
+      - nginx-staging-proxy
 networks:
   sylibos-net:
-    name: sylibos-net
+    name: staging-sylibos-net
+  nginx-staging-proxy:
+    external: true
+    name: nginx-staging-proxy
