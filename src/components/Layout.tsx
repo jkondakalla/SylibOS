@@ -31,11 +31,6 @@ function Brand() {
   )
 }
 
-function initials(name?: string, email?: string): string {
-  const src = (name || email || '?').trim()
-  const parts = src.split(/[\s@.]+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || src[0].toUpperCase()
-}
 
 export default function Layout() {
   const { segments, hydrate } = useAppStore()
