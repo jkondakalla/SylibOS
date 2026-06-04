@@ -6,9 +6,11 @@ const AUTH_URL = (import.meta.env.VITE_JKOS_AUTH_URL as string | undefined) ?? '
 let _refreshing: Promise<boolean> | null = null
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const hasBody = init.body != null
   const opts: RequestInit = {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    // Only set Content-Type for requests that actually have a body
+    ...(hasBody ? { headers: { 'Content-Type': 'application/json' } } : {}),
     ...init,
   }
   const r = await fetch(path, opts)

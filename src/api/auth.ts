@@ -15,6 +15,9 @@ export async function getMe(): Promise<JkosUser | null> {
     const data = await res.json()
     return data.user as JkosUser
   }
+  // Distinguish server errors from auth failures — 5xx throws so callers
+  // don't treat a broken backend as "not authenticated" and redirect to login
+  if (res.status >= 500) throw new Error(`Auth check failed: ${res.status}`)
   return null
 }
 
@@ -38,8 +41,58 @@ export async function logout(): Promise<void> {
 
 // ── Cross-app profile / preferences (auth.jkos.net) ──────────────────────────
 
+export interface JkOSTheme {
+  mode:      'light' | 'dark' | 'system'
+  primary:   string   // single hex; CSS adapts for light/dark via color-mix()
+  secondary: string
+}
+
+export interface EffectsPreferences {
+  grain:         boolean
+  grainStrength: number   // 0–1
+  halation:      boolean
+  scanLines:     boolean
+  scanStrength:  number   // 0–1
+  artifacts:     boolean
+}
+
+export interface LazurPreferences {
+  url:   string
+  model: string
+}
+
 export interface UserPreferences {
-  scheme?: string
+  scheme?:  string
+  theme?:   JkOSTheme
+  effects?: EffectsPreferences
+  lazuros?: LazurPreferences
+}
+
+export const DEFAULT_THEME: JkOSTheme = {
+  mode:      'system',
+  primary:   '#ffb000',
+  secondary: '#4ecdc4',
+}
+
+export const DEFAULT_EFFECTS: EffectsPreferences = {
+  grain:         true,
+  grainStrength: 0.35,
+  halation:      true,
+  scanLines:     false,
+  scanStrength:  0.25,
+  artifacts:     false,
+}
+
+// Migrate old 4-colour format → simplified single pair
+export function normaliseTheme(raw: any): JkOSTheme {
+  if (!raw) return DEFAULT_THEME
+  if (raw.primary) return raw as JkOSTheme
+  // old format: { dark: { primary, secondary }, light: { primary, secondary }, mode }
+  return {
+    mode:      raw.mode ?? 'system',
+    primary:   raw.dark?.primary   ?? DEFAULT_THEME.primary,
+    secondary: raw.dark?.secondary ?? DEFAULT_THEME.secondary,
+  }
 }
 
 export interface AuthProfile {

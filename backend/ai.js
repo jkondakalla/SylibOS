@@ -88,8 +88,14 @@ function mockContent(title) {
 
 function validateAiResponse(parsed) {
   if (!parsed || typeof parsed !== 'object') throw new Error('AI response is not an object')
-  if (!Array.isArray(parsed.quiz)) throw new Error('AI response missing quiz array')
+  if (!Array.isArray(parsed.quiz))  throw new Error('AI response missing quiz array')
   if (!Array.isArray(parsed.tasks)) throw new Error('AI response missing tasks array')
+  for (const q of parsed.quiz) {
+    if (!Array.isArray(q.options) || q.options.length === 0) throw new Error('Quiz question missing options')
+    if (typeof q.correctIndex !== 'number' || q.correctIndex < 0 || q.correctIndex >= q.options.length) {
+      throw new Error(`Quiz correctIndex ${q.correctIndex} out of range for ${q.options.length} options`)
+    }
+  }
   return parsed
 }
 
@@ -106,7 +112,9 @@ async function callOllama(url, model, title, content, unit, courseTitle) {
   })
   if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`)
   const data = await res.json()
-  return validateAiResponse(JSON.parse(data.response))
+  let parsed
+  try { parsed = JSON.parse(data.response) } catch { throw new Error('Ollama returned malformed JSON') }
+  return validateAiResponse(parsed)
 }
 
 async function callLazuros(url, token, model, title, content, unit, courseTitle) {
@@ -125,7 +133,9 @@ async function callLazuros(url, token, model, title, content, unit, courseTitle)
   })
   if (!res.ok) throw new Error(`LazurOS HTTP ${res.status}`)
   const data = await res.json()
-  return validateAiResponse(JSON.parse(data.response))
+  let parsed
+  try { parsed = JSON.parse(data.response) } catch { throw new Error('LazurOS returned malformed JSON') }
+  return validateAiResponse(parsed)
 }
 
 export async function generateSegmentContent(settings, lectureTitle, lectureContent, unit, courseTitle) {

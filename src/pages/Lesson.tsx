@@ -41,6 +41,9 @@ function QuizBlock({ questions, color, onComplete }: {
   const [selected, setSelected] = useState<number | null>(null)
   const [revealed, setRevealed] = useState(false)
   const [answers, setAnswers] = useState<boolean[]>([])
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
 
   const q = questions[current]
   const isLast = current === questions.length - 1
@@ -50,7 +53,9 @@ function QuizBlock({ questions, color, onComplete }: {
     setRevealed(true)
     const next = [...answers, selected === q.correctIndex]
     setAnswers(next)
-    if (isLast) setTimeout(() => onComplete(next.filter(Boolean).length), 900)
+    if (isLast) {
+      timerRef.current = setTimeout(() => onComplete(next.filter(Boolean).length), 900)
+    }
   }
   function advance() {
     setCurrent(c => c + 1); setSelected(null); setRevealed(false)

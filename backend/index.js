@@ -65,24 +65,30 @@ app.get('/api/courses', (req, res) => {
 })
 
 app.post('/api/courses', (req, res) => {
-  const userId = String(req.user.sub)
-  const course = { ...req.body, userId }
-  if (!course?.id || !course?.title) {
-    return res.status(400).json({ error: 'id and title required' })
-  }
-  insertCourse(course)
-  res.status(201).json({ ok: true })
+  try {
+    const userId = String(req.user.sub)
+    const course = { ...req.body, userId }
+    if (!course?.id || !course?.title) {
+      return res.status(400).json({ error: 'id and title required' })
+    }
+    insertCourse(course)
+    res.status(201).json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.get('/api/courses/:id', (req, res) => {
-  const course = getCourse(req.params.id, String(req.user.sub))
-  if (!course) return res.status(404).json({ error: 'Not found' })
-  res.json(course)
+  try {
+    const course = getCourse(req.params.id, String(req.user.sub))
+    if (!course) return res.status(404).json({ error: 'Not found' })
+    res.json(course)
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.delete('/api/courses/:id', (req, res) => {
-  deleteCourse(req.params.id, String(req.user.sub))
-  res.json({ ok: true })
+  try {
+    deleteCourse(req.params.id, String(req.user.sub))
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ── Segments ──────────────────────────────────────────────────────────────────
@@ -92,23 +98,29 @@ app.get('/api/segments', (req, res) => {
 })
 
 app.post('/api/segments', (req, res) => {
-  const userId = String(req.user.sub)
-  const seg = { ...req.body, userId }
-  if (!seg?.id || !seg?.lectureId) {
-    return res.status(400).json({ error: 'id and lectureId required' })
-  }
-  insertSegment(seg)
-  res.status(201).json({ ok: true })
+  try {
+    const userId = String(req.user.sub)
+    const seg = { ...req.body, userId }
+    if (!seg?.id || !seg?.lectureId) {
+      return res.status(400).json({ error: 'id and lectureId required' })
+    }
+    insertSegment(seg)
+    res.status(201).json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.patch('/api/segments/:id', (req, res) => {
-  const userId = String(req.user.sub)
-  const patch = req.body
-  patchSegment(req.params.id, userId, patch)
-  if (patch.completedAt && patch.courseId) {
-    updateCourseCompletedSegments(patch.courseId, userId, 1)
-  }
-  res.json({ ok: true })
+  try {
+    const userId = String(req.user.sub)
+    const patch = req.body
+    const result = patchSegment(req.params.id, userId, patch)
+    // Only increment completedSegments if patchSegment actually marked it complete
+    // (patchSegment guards with AND completed_at IS NULL, so result.changes === 0 means already completed)
+    if (patch.completedAt && patch.courseId && result?.changes > 0) {
+      updateCourseCompletedSegments(patch.courseId, userId, 1)
+    }
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ── Daily logs ────────────────────────────────────────────────────────────────
@@ -118,11 +130,13 @@ app.get('/api/daily-logs', (req, res) => {
 })
 
 app.post('/api/daily-logs', (req, res) => {
-  const log = req.body
-  if (!log?.date) return res.status(400).json({ error: 'date required' })
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(log.date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
-  upsertDailyLog(String(req.user.sub), log)
-  res.status(201).json({ ok: true })
+  try {
+    const log = req.body
+    if (!log?.date) return res.status(400).json({ error: 'date required' })
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(log.date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' })
+    upsertDailyLog(String(req.user.sub), log)
+    res.status(201).json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -132,8 +146,10 @@ app.get('/api/settings', (req, res) => {
 })
 
 app.put('/api/settings', (req, res) => {
-  saveSettings(String(req.user.sub), req.body)
-  res.json({ ok: true })
+  try {
+    saveSettings(String(req.user.sub), req.body)
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ── Summary (for ORDECK widget) ───────────────────────────────────────────────
@@ -321,6 +337,7 @@ app.post('/api/import-manifest', (req, res) => {
 
 app.post('/api/admin/run-nightly', async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' })
+  if (_nightlyRunning) return res.status(409).json({ ok: false, message: 'Job is already running' })
   res.json({ ok: true, message: 'Nightly job started' })
   runNightlyJob().catch(e => console.error('[nightly] Error from manual trigger:', e))
 })

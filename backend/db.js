@@ -200,14 +200,17 @@ export function insertSegment(seg) {
 }
 
 export const patchSegment = db.transaction((id, userId, patch) => {
+  let result = { changes: 0 }
   if (patch.completedAt !== undefined) {
-    db.prepare('UPDATE segments SET completed_at = ?, quiz_score = ? WHERE id = ? AND user_id = ?')
+    // Guard: only set completed_at if not already completed — prevents double-increment of course counter
+    result = db.prepare('UPDATE segments SET completed_at = ?, quiz_score = ? WHERE id = ? AND user_id = ? AND completed_at IS NULL')
       .run(patch.completedAt, patch.quizScore ?? null, id, userId)
   }
   if (patch.quiz !== undefined) {
     db.prepare('UPDATE segments SET quiz = ?, tasks = ? WHERE id = ? AND user_id = ?')
       .run(JSON.stringify(patch.quiz), JSON.stringify(patch.tasks ?? []), id, userId)
   }
+  return result
 })
 
 export function updateCourseCompletedSegments(courseId, userId, delta) {
@@ -219,7 +222,11 @@ export function updateCourseCompletedSegments(courseId, userId, delta) {
 
 export function getDailyLogs(userId) {
   return db.prepare('SELECT * FROM daily_logs WHERE user_id = ? ORDER BY date DESC').all(userId)
-    .map(r => ({ date: r.date, segmentIds: JSON.parse(r.segment_ids) }))
+    .map(r => {
+      let segmentIds = []
+      try { segmentIds = JSON.parse(r.segment_ids) } catch { console.warn('[db] corrupt segment_ids for', r.date) }
+      return { date: r.date, segmentIds }
+    })
 }
 
 export function upsertDailyLog(userId, log) {
@@ -240,7 +247,8 @@ const ENV_SETTINGS_DEFAULTS = {
 
 export function getSettings(userId) {
   const row = db.prepare('SELECT data FROM settings WHERE user_id = ?').get(userId)
-  const stored = row ? JSON.parse(row.data) : {}
+  let stored = {}
+  if (row) { try { stored = JSON.parse(row.data) } catch { console.warn('[db] corrupt settings for user', userId) } }
   return { ...ENV_SETTINGS_DEFAULTS, ...stored }
 }
 
@@ -273,6 +281,9 @@ function normLecture(r) {
 }
 
 function normSegment(r) {
+  let quiz = [], tasks = []
+  try { quiz  = JSON.parse(r.quiz)  } catch { console.warn('[db] corrupt quiz for segment', r.id) }
+  try { tasks = JSON.parse(r.tasks) } catch { console.warn('[db] corrupt tasks for segment', r.id) }
   return {
     id: r.id,
     lectureId: r.lecture_id,
@@ -282,8 +293,8 @@ function normSegment(r) {
     unit: r.unit,
     section: r.section ?? undefined,
     generatedAt: r.generated_at,
-    quiz: JSON.parse(r.quiz),
-    tasks: JSON.parse(r.tasks),
+    quiz,
+    tasks,
     completedAt: r.completed_at ?? undefined,
     quizScore: r.quiz_score ?? undefined,
   }

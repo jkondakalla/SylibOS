@@ -66,19 +66,43 @@ export const useAppStore = create<AppState>((set, get) => ({
     const courses = sortNewestFirst([...get().courses, course])
     db.saveCourses(courses)
     set({ courses })
-    api.createCourse(course).catch(e => console.warn('[store] createCourse failed:', e))
+    api.createCourse(course).catch(e => {
+      console.warn('[store] createCourse failed — reverting:', e)
+      const reverted = get().courses.filter(c => c.id !== course.id)
+      db.saveCourses(reverted)
+      set({ courses: reverted })
+    })
   },
 
   removeCourse: (courseId) => {
-    const courses = get().courses.filter(c => c.id !== courseId)
-    const segments = { ...get().segments }
-    Object.keys(segments).forEach(id => {
-      if (segments[id].courseId === courseId) delete segments[id]
-    })
+    const prevCourses = get().courses
+    const prevSegments = get().segments
+    const prevLogs = get().dailyLogs
+
+    const deletedSegmentIds = new Set(
+      Object.keys(prevSegments).filter(id => prevSegments[id].courseId === courseId)
+    )
+    const courses = prevCourses.filter(c => c.id !== courseId)
+    const segments = Object.fromEntries(
+      Object.entries(prevSegments).filter(([id]) => !deletedSegmentIds.has(id))
+    )
+    // Remove deleted segment IDs from daily logs to prevent stale references
+    const dailyLogs = prevLogs.map(log => ({
+      ...log,
+      segmentIds: log.segmentIds.filter((id: string) => !deletedSegmentIds.has(id)),
+    }))
+
     db.saveCourses(courses)
     db.saveSegments(segments)
-    set({ courses, segments })
-    api.deleteCourse(courseId).catch(e => console.warn('[store] deleteCourse failed:', e))
+    db.saveDailyLogs(dailyLogs)
+    set({ courses, segments, dailyLogs })
+    api.deleteCourse(courseId).catch(e => {
+      console.warn('[store] deleteCourse failed — reverting:', e)
+      db.saveCourses(prevCourses)
+      db.saveSegments(prevSegments)
+      db.saveDailyLogs(prevLogs)
+      set({ courses: prevCourses, segments: prevSegments, dailyLogs: prevLogs })
+    })
   },
 
   addSegment: (segment) => {
@@ -99,7 +123,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     db.saveSegments(segments)
     db.saveCourses(courses)
     set({ segments, courses })
-    api.createSegment(segment).catch(e => console.warn('[store] createSegment failed:', e))
+    api.createSegment(segment).catch(e => {
+      console.warn('[store] createSegment failed — reverting:', e)
+      const revSegments = { ...get().segments }
+      delete revSegments[segment.id]
+      const revCourses = get().courses.map(course => {
+        if (course.id !== segment.courseId) return course
+        return {
+          ...course,
+          lectures: course.lectures.map(lec =>
+            lec.id === segment.lectureId
+              ? { ...lec, hasSegment: false, segmentId: undefined }
+              : lec
+          ),
+        }
+      })
+      db.saveSegments(revSegments)
+      db.saveCourses(revCourses)
+      set({ segments: revSegments, courses: revCourses })
+    })
   },
 
   completeSegment: (segmentId, quizScore) => {
@@ -136,15 +178,35 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const todayLog = dailyLogs.find(l => l.date === today)!
     api.patchSegment(segmentId, { completedAt: now, quizScore, courseId: seg.courseId })
-      .catch(e => console.warn('[store] patchSegment failed:', e))
+      .catch(e => {
+        console.warn('[store] patchSegment failed — reverting:', e)
+        const prevSegs = { ...get().segments, [segmentId]: existing }
+        const prevCourses = get().courses.map(c =>
+          c.id === seg.courseId ? { ...c, completedSegments: c.completedSegments - 1 } : c
+        )
+        const prevLogs = get().dailyLogs.map(l =>
+          l.date === today
+            ? { ...l, segmentIds: l.segmentIds.filter((id: string) => id !== segmentId) }
+            : l
+        )
+        db.saveSegments(prevSegs)
+        db.saveCourses(prevCourses)
+        db.saveDailyLogs(prevLogs)
+        set({ segments: prevSegs, courses: prevCourses, dailyLogs: prevLogs })
+      })
     api.upsertDailyLog(todayLog)
       .catch(e => console.warn('[store] upsertDailyLog failed:', e))
   },
 
   updateSettings: (patch) => {
-    const settings = { ...get().settings, ...patch }
+    const prev = get().settings
+    const settings = { ...prev, ...patch }
     db.saveSettings(settings)
     set({ settings })
-    api.saveSettings(settings).catch(e => console.warn('[store] saveSettings failed:', e))
+    api.saveSettings(settings).catch(e => {
+      console.warn('[store] saveSettings failed — reverting:', e)
+      db.saveSettings(prev)
+      set({ settings: prev })
+    })
   },
 }))

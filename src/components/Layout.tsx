@@ -1,22 +1,18 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
 import { useAuthStore } from '../store/authStore'
 import { useTheme } from '../lib/theme'
+import { useJkOSPreferences } from '../hooks/useJkOSPreferences'
 import { Bar, Icon, Spinner, ThemeToggle, cx } from './ui'
-import { ProfileMenu } from './ProfileMenu'
+import { FilmGrain, Halation, ScanLines, Artifacts } from './Overlays'
+import { SettingsPanel } from './SettingsPanel'
 
 const NAV = [
   { to: '/', label: 'Today', icon: 'book', end: true },
   { to: '/library', label: 'Library', icon: 'layers', end: false },
   { to: '/settings', label: 'Settings', icon: 'settings', end: false },
 ] as const
-
-function initials(name?: string | null, email?: string | null): string {
-  const src = (name || email || '?').trim()
-  const parts = src.split(/[\s@.]+/).filter(Boolean)
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || src[0].toUpperCase()
-}
 
 function Brand() {
   return (
@@ -32,13 +28,39 @@ function Brand() {
 }
 
 
+function ProfileButton({ user, onClick, open }: { user: any; onClick: () => void; open: boolean }) {
+  const src = (user?.name || user?.email || '?').trim()
+  const parts = src.split(/[\s@.]+/).filter(Boolean)
+  const inits = ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || src[0].toUpperCase()
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Open settings"
+      title={user?.name || user?.email}
+      className={cx(
+        'flex h-8 w-8 items-center justify-center rounded-full text-[12px] font-bold transition',
+        'border border-line-strong',
+        open
+          ? 'bg-accent text-accent-contrast border-accent shadow-[0_0_8px_var(--color-accent-glow)]'
+          : 'bg-accent-soft text-accent-ink hover:border-accent hover:shadow-[0_0_6px_var(--color-accent-glow)]',
+      )}
+    >
+      {inits}
+    </button>
+  )
+}
+
 export default function Layout() {
   const { segments, hydrate } = useAppStore()
   const { status, init, user } = useAuthStore()
-  useTheme()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
+  const prefs = useJkOSPreferences()
+  const { effects } = prefs
 
-  useEffect(() => { init() }, [])
-  useEffect(() => { if (status === 'ready') hydrate() }, [status])
+  useEffect(() => { init() }, [init])
+  useEffect(() => { if (status === 'ready') hydrate() }, [status, hydrate])
 
   if (status === 'loading' || status === 'unauthenticated') {
     return (
@@ -55,7 +77,10 @@ export default function Layout() {
   const done = Object.values(segments).filter(s => s.completedAt).length
 
   return (
-    <div className="min-h-screen">
+    <div
+      className="min-h-screen"
+      style={effects.halation && isDark ? { filter: 'url(#sylib-halation)' } : undefined}
+    >
       <header className="sticky top-0 z-50 border-b border-line bg-paper/85 backdrop-blur-xl papered">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
           <Brand />
@@ -85,11 +110,8 @@ export default function Layout() {
               <span className="hidden text-[13px] text-muted md:inline max-w-[140px] truncate">
                 {user?.name || user?.email}
               </span>
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-[12px] font-bold text-accent-ink">
-                {initials(user?.name, user?.email)}
-              </span>
             </div>
-            <ProfileMenu user={user} />
+            <ProfileButton user={user} onClick={() => setSettingsOpen(o => !o)} open={settingsOpen} />
           </div>
         </div>
       </header>
@@ -97,6 +119,19 @@ export default function Layout() {
       <main>
         <Outlet />
       </main>
+
+      {/* CRT overlay effects — tasteful defaults, user-controlled in settings */}
+      {effects.grain     && <FilmGrain strength={effects.grainStrength} />}
+      {effects.halation  && isDark && <Halation />}
+      {effects.scanLines && <ScanLines strength={effects.scanStrength} />}
+      {effects.artifacts && <Artifacts />}
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        {...prefs}
+        user={prefs.user ?? user}
+      />
     </div>
   )
 }

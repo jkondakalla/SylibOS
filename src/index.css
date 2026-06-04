@@ -65,7 +65,9 @@
 }
 
 :root[data-theme="light"] {
+  /* SylibOS reading-room paper light — its own identity */
   --accent-base: #0e7c66;
+  --accent-secondary: #2563eb;
   --color-paper: #fbfaf7;
   --color-paper-2: #f2efe8;
   --color-card: #ffffff;
@@ -75,12 +77,20 @@
   --color-faint: #9c958a;
   --color-line: #eae4d8;
   --color-line-strong: #ddd6c7;
-  /* accent derived from --accent-base (set by applyScheme) */
+  /* accent — on paper context: saturated and clear */
   --color-accent: var(--accent-base);
+  --color-accent-bright: var(--accent-base);
   --color-accent-strong: color-mix(in oklab, var(--accent-base) 78%, #000);
+  --color-accent-dim: color-mix(in oklab, var(--accent-base) 60%, #000);
+  --color-accent-deep: color-mix(in oklab, var(--accent-base) 40%, #000);
+  --color-accent-glow: color-mix(in srgb, var(--accent-base) 20%, transparent);
   --color-accent-soft: color-mix(in oklab, var(--accent-base) 12%, var(--color-card));
   --color-accent-ink: color-mix(in oklab, var(--accent-base) 80%, #000);
   --color-accent-contrast: #ffffff;
+  /* secondary */
+  --color-secondary: var(--accent-secondary);
+  --color-secondary-dim: color-mix(in oklab, var(--accent-secondary) 70%, #000);
+  --color-secondary-glow: color-mix(in srgb, var(--accent-secondary) 20%, transparent);
   --color-ok: #15803d;
   --color-ok-soft: #e3f2e8;
   --color-warn: #b45309;
@@ -98,7 +108,9 @@
 }
 
 :root[data-theme="dark"] {
+  /* SylibOS cool digital dark — its own identity */
   --accent-base: #0e7c66;
+  --accent-secondary: #2563eb;
   --color-paper: #121318;
   --color-paper-2: #181a20;
   --color-card: #1b1d24;
@@ -108,12 +120,20 @@
   --color-faint: #6c685f;
   --color-line: #2a2d36;
   --color-line-strong: #383c47;
-  /* accent derived from --accent-base (set by applyScheme) */
+  /* accent — adapted for dark: brighter and lighter */
   --color-accent: color-mix(in oklab, var(--accent-base) 60%, #fff);
   --color-accent-strong: color-mix(in oklab, var(--accent-base) 44%, #fff);
   --color-accent-soft: color-mix(in oklab, var(--accent-base) 30%, var(--color-card));
   --color-accent-ink: color-mix(in oklab, var(--accent-base) 52%, #fff);
   --color-accent-contrast: color-mix(in oklab, var(--accent-base) 88%, #000);
+  --color-accent-bright: color-mix(in oklab, var(--accent-base) 75%, #fff);
+  --color-accent-dim: color-mix(in oklab, var(--accent-base) 50%, #000);
+  --color-accent-deep: color-mix(in oklab, var(--accent-base) 25%, #000);
+  --color-accent-glow: color-mix(in srgb, var(--accent-base) 40%, transparent);
+  /* secondary */
+  --color-secondary: color-mix(in oklab, var(--accent-secondary) 60%, #fff);
+  --color-secondary-dim: color-mix(in oklab, var(--accent-secondary) 50%, #000);
+  --color-secondary-glow: color-mix(in srgb, var(--accent-secondary) 40%, transparent);
   --color-ok: #34d399;
   --color-ok-soft: #122a20;
   --color-warn: #fbbf24;
@@ -164,6 +184,11 @@ input[type="range"] { accent-color: var(--color-accent); }
 }
 .read p { margin: 0 0 1.1em; }
 .read p:last-child { margin-bottom: 0; }
+
+/* CRT overlay keyframes (used by Overlays.tsx components) */
+@keyframes scanRoll { from { background-position: 0 0; } to { background-position: 0 -4px; } }
+@keyframes scanPulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes artifactFlash { 0% { opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { opacity: 0; } }
 
 @keyframes fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

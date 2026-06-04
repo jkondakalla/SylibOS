@@ -75,7 +75,11 @@ async function orgViaOllama(
   })
   if (!res.ok) throw new Error(`Ollama error: ${res.status}`)
   const data = (await res.json()) as { response: string }
-  return JSON.parse(data.response) as CourseStructure
+  try {
+    return JSON.parse(data.response) as CourseStructure
+  } catch {
+    throw new Error('Ollama returned malformed JSON for course structure')
+  }
 }
 
 async function orgViaLazuros(
@@ -100,7 +104,11 @@ async function orgViaLazuros(
   })
   if (!res.ok) throw new Error(`LazurOS error: ${res.status}`)
   const data = (await res.json()) as { response: string }
-  return JSON.parse(data.response) as CourseStructure
+  try {
+    return JSON.parse(data.response) as CourseStructure
+  } catch {
+    throw new Error('LazurOS returned malformed JSON for course structure')
+  }
 }
 
 async function orgViaClaude(
@@ -217,7 +225,11 @@ async function callOllama(
   })
   if (!response.ok) throw new Error(`Ollama error: ${response.status}`)
   const data = (await response.json()) as { response: string }
-  return JSON.parse(data.response) as LessonContent
+  try {
+    return JSON.parse(data.response) as LessonContent
+  } catch {
+    throw new Error('Ollama returned malformed JSON')
+  }
 }
 
 async function callLazuros(
@@ -244,7 +256,11 @@ async function callLazuros(
   })
   if (!response.ok) throw new Error(`LazurOS error: ${response.status}`)
   const data = (await response.json()) as { response: string }
-  return JSON.parse(data.response) as LessonContent
+  try {
+    return JSON.parse(data.response) as LessonContent
+  } catch {
+    throw new Error('LazurOS returned malformed JSON')
+  }
 }
 
 async function callClaude(

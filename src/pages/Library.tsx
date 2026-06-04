@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Icon, Spinner } from '../components/ui'
+import { EmptyState, Icon, Spinner } from '../components/ui'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
 import { useAuthStore } from '../store/authStore'
@@ -103,10 +103,16 @@ export default function Library() {
   const isAdmin = user?.role === 'admin'
 
   if (loading) return (
-    <div className="lib"><div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '20rem' }}><Spinner size={28} /></div></div>
+    <div className="lib">
+      <div className="flex min-h-64 items-center justify-center"><Spinner size={28} /></div>
+    </div>
   )
   if (error) return (
-    <div className="lib"><div style={{ textAlign: 'center', paddingTop: '4rem', color: 'var(--color-muted)' }}>{error}</div></div>
+    <div className="lib">
+      <EmptyState icon="x" title="Could not load library" body={error} action={
+        <button className="btn btn-ghost btn-sm" onClick={reload}>Try again</button>
+      } />
+    </div>
   )
 
   const countLabel = `${filtered.length} ${filtered.length === 1 ? 'course' : 'courses'}${subject !== 'All' ? ` in ${subject}` : ''}`
@@ -141,15 +147,8 @@ export default function Library() {
       <p className="lib-count">{countLabel}</p>
 
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem 1rem', color: 'var(--color-muted)' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '3.5rem', height: '3.5rem', borderRadius: '1rem', background: 'var(--color-accent-soft)', color: 'var(--color-accent-ink)', marginBottom: '1rem' }}>
-            <Icon name="search" size={26} />
-          </div>
-          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 600, color: 'var(--color-ink)', margin: '0 0 .35rem' }}>No courses match</h3>
-          <p style={{ fontSize: '.875rem', margin: 0 }}>
-            {isAdmin ? 'Try clearing the filter, or upload a manifest above.' : 'Try clearing the subject filter or search.'}
-          </p>
-        </div>
+        <EmptyState icon="search" title="No courses match"
+          body={isAdmin ? 'Try clearing the filter, or upload a manifest above.' : 'Try clearing the subject filter or search.'} />
       ) : (
         <div className="lib-grid">
           {filtered.map(course => (
@@ -258,19 +257,22 @@ function CourseCard({
   const navigate = useNavigate()
   const hydrate = useAppStore(s => s.hydrate)
   const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
   const color = subjectColor(course.subject)
 
   const handleAdd = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (course.added || adding) return
     setAdding(true)
+    setAddError(null)
     try {
       const result = await addLibraryCourse(course.slug)
       onAdded(course.slug)
       await hydrate()
       navigate(`/course/${result.courseId}`)
-    } catch {
+    } catch (err: any) {
       setAdding(false)
+      setAddError(err?.message ?? 'Failed to add course')
     }
   }, [course.added, course.slug, adding, navigate, onAdded, hydrate])
 
@@ -324,6 +326,9 @@ function CourseCard({
             </button>
           )}
         </div>
+        {addError && (
+          <p style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: '.35rem', padding: '0 .25rem' }}>{addError}</p>
+        )}
       </div>
     </article>
   )
@@ -342,6 +347,7 @@ function PreviewModal({
   const [loadingPreview, setLoadingPreview] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -361,14 +367,16 @@ function PreviewModal({
   const handleAdd = useCallback(async () => {
     if (isAdded || adding || !data) return
     setAdding(true)
+    setAddError(null)
     try {
       const result = await addLibraryCourse(slug)
       onAdded(slug)
       onClose()
       await hydrate()
       navigate(`/course/${result.courseId}`)
-    } catch {
+    } catch (err: any) {
       setAdding(false)
+      setAddError(err?.message ?? 'Failed to add course')
     }
   }, [isAdded, adding, data, slug, navigate, onAdded, onClose, hydrate])
 
@@ -466,6 +474,9 @@ function PreviewModal({
               ))}
             </div>
 
+            {addError && (
+              <p style={{ fontSize: 12, color: 'var(--color-danger)', margin: '0 0 .75rem' }}>{addError}</p>
+            )}
             <div className="modal-actions">
               <button className="btn btn-ghost btn-md" onClick={onClose}>Close</button>
               {isAdded ? (

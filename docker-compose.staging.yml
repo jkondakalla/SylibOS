@@ -1,18 +1,20 @@
-name: jkos-prod-sylibos
+name: jkos-staging-sylibos
 services:
   sylibos-frontend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: sylibos-frontend
+      args:
+        VITE_BASE: /sylib/
+    container_name: staging-sylibos-frontend
     restart: unless-stopped
     networks:
-      - jkos-internal
+      - nginx-staging-proxy
 
   sylibos-api:
     build:
       context: ./backend
-    container_name: sylibos-api
+    container_name: staging-sylibos-api
     restart: unless-stopped
     env_file: .env
     environment:
@@ -20,13 +22,13 @@ services:
       DB_PATH: /data/sylibos.db
       LIBRARY_DB_PATH: /data/library.db
     volumes:
-      - ${SYLIBOS_DATA_PATH:-/mnt/Luna/Backends/SylibOS-Data}:/data
+      - ${SYLIBOS_DATA_PATH:-/mnt/Luna/Backends-Staging/SylibOS-Data}:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - jkos-internal
+      - nginx-staging-proxy
 
 networks:
-  jkos-internal:
+  nginx-staging-proxy:
     external: true
-    name: jkos-internal
+    name: nginx-staging-proxy
