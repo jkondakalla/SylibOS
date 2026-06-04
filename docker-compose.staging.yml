@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_BASE: /sylib/
+        VITE_JKOS_AUTH_URL: https://staging.jkos.net/auth
     container_name: staging-sylibos-frontend
     restart: unless-stopped
     networks:
@@ -21,6 +22,7 @@ services:
       PORT: "8004"
       DB_PATH: /data/sylibos.db
       LIBRARY_DB_PATH: /data/library.db
+      SHELL_URL: https://staging.jkos.net
     volumes:
       - ${SYLIBOS_DATA_PATH:-/mnt/Luna/Backends-Staging/SylibOS-Data}:/data
     extra_hosts:

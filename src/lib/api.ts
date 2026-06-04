@@ -2,10 +2,16 @@ import type { Course, Segment, DailyLog, AppSettings } from '../types'
 import { redirectToLogin } from '../api/auth'
 
 const AUTH_URL = (import.meta.env.VITE_JKOS_AUTH_URL as string | undefined) ?? 'https://auth.jkos.net'
+// Strip trailing slash from Vite base so we can prepend it to /api/... paths.
+// In prod (base = '/') this becomes '' so paths are unchanged.
+// In staging (base = '/sylib/') this becomes '/sylib' so /api/x → /sylib/api/x,
+// which nginx routes to the staging-sylibos-api container.
+const API_BASE = (import.meta.env.BASE_URL as string).replace(/\/$/, '')
 
 let _refreshing: Promise<boolean> | null = null
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const url = API_BASE + path
   const hasBody = init.body != null
   const opts: RequestInit = {
     credentials: 'include',
@@ -13,7 +19,7 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
     ...(hasBody ? { headers: { 'Content-Type': 'application/json' } } : {}),
     ...init,
   }
-  const r = await fetch(path, opts)
+  const r = await fetch(url, opts)
   if (r.status !== 401) return r
 
   let data: any
@@ -26,7 +32,7 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   }
   const ok = await _refreshing
   if (!ok) return r
-  return fetch(path, opts)
+  return fetch(url, opts)
 }
 
 export async function call<T>(path: string, init?: RequestInit): Promise<T> {

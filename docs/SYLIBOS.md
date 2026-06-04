@@ -695,7 +695,7 @@ services:
 | `JKOS_AUTH_URL` | `https://auth.jkos.net` | `https://staging.jkos.net/auth` |
 | `VITE_JKOS_AUTH_URL` | `https://auth.jkos.net` | `https://staging.jkos.net/auth` |
 | `VITE_APP_ORIGIN` | `https://sylibos.jkos.net` | `https://staging.jkos.net/sylib` |
-| `SHELL_URL` | `https://sylibos.jkos.net` | `https://staging.jkos.net/sylib` |
+| `SHELL_URL` | `https://sylibos.jkos.net` | `https://staging.jkos.net` |
 | `SYLIBOS_DATA_PATH` | `/mnt/Luna/Backends/SylibOS-Data` | `/mnt/Luna/Backends-Staging/SylibOS-Data` |
 
 ### Vite base path (staging branch only)
