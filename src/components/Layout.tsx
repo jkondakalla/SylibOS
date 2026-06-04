@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAppStore } from '../store/appStore'
 import { useAuthStore } from '../store/authStore'
-import { useTheme } from '../lib/theme'
 import { useJkOSPreferences } from '../hooks/useJkOSPreferences'
 import { Bar, Icon, Spinner, ThemeToggle, cx } from './ui'
 import { FilmGrain, Halation, ScanLines, Artifacts } from './Overlays'
@@ -54,9 +53,9 @@ export default function Layout() {
   const { segments, hydrate } = useAppStore()
   const { status, init, user } = useAuthStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const { theme } = useTheme()
-  const isDark = theme === 'dark'
   const prefs = useJkOSPreferences()
+  const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  const isDark = prefs.theme.mode === 'dark' || (prefs.theme.mode === 'system' && prefersDark)
   const { effects } = prefs
 
   useEffect(() => { init() }, [init])
