@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 
 export function jkosAuth(opts) {
-  const { publicKey } = opts
+  const { publicKey, issuer = 'jkos-auth' } = opts
   if (!publicKey) throw new Error('jkosAuth: publicKey is required')
   const key = publicKey.replace(/\\n/g, '\n')
 
@@ -11,7 +11,7 @@ export function jkosAuth(opts) {
       return res.status(401).json({ error: 'Not authenticated', code: 'UNAUTHENTICATED' })
     }
     try {
-      req.user = jwt.verify(token, key, { algorithms: ['RS256'], issuer: 'jkos-auth' })
+      req.user = jwt.verify(token, key, { algorithms: ['RS256'], issuer })
       next()
     } catch (err) {
       if (err.name === 'TokenExpiredError') {

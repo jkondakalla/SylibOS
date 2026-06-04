@@ -20,7 +20,8 @@ const app = express()
 app.set('trust proxy', 1)
 const PORT = Number(process.env.PORT ?? 8004)
 const NIGHTLY_CRON = process.env.NIGHTLY_CRON ?? '0 2 * * *'
-const SHELL_URL = process.env.SHELL_URL ?? 'https://sylibos.jkos.net'
+const SHELL_URL        = process.env.SHELL_URL        ?? 'https://sylibos.jkos.net'
+const JKOS_AUTH_ISSUER = process.env.JKOS_AUTH_ISSUER ?? 'jkos-auth'
 
 app.use(cors({ origin: SHELL_URL, credentials: true }))
 app.use(express.json({ limit: '20mb' }))
@@ -43,7 +44,7 @@ attachLibraryAssetRoute(app, lib)
 // ── Auth (all routes below require a valid jkos_token cookie) ─────────────────
 
 const authMiddleware = process.env.JKOS_AUTH_PUBLIC_KEY
-  ? jkosAuth({ publicKey: process.env.JKOS_AUTH_PUBLIC_KEY })
+  ? jkosAuth({ publicKey: process.env.JKOS_AUTH_PUBLIC_KEY, issuer: JKOS_AUTH_ISSUER })
   : (req, _res, next) => { req.user = { sub: 1, role: 'admin' }; next() } // dev fallback
 
 app.use(authMiddleware)
