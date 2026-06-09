@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import type { SchemeId } from '../types'
 import type { JkOSTheme } from '../api/auth'
+import { applyJkOSMode as designApplyJkOSMode, applyJkOSTheme as designApplyJkOSTheme } from '@design/utils/applyJkOSTheme'
 
 export type { SchemeId }
 export type ThemeName = 'light' | 'dark'
@@ -26,17 +27,18 @@ export function schemeById(id: string): Scheme {
 
 export function applyScheme(id: SchemeId): void {
   const s = schemeById(id)
-  document.documentElement.setAttribute('data-theme', s.theme)
+  document.documentElement.setAttribute('data-mode', s.theme === 'dark' ? 'dark' : 'paper')
+  document.documentElement.style.setProperty('--accent', s.accent)
   document.documentElement.style.setProperty('--accent-base', s.accent)
 }
 
 export function applyJkOSTheme(theme: JkOSTheme): void {
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-  const isDark = theme.mode === 'dark' || (theme.mode === 'system' && prefersDark)
-  const root = document.documentElement
-  root.setAttribute('data-theme', isDark ? 'dark' : 'light')
-  root.style.setProperty('--accent-base',      theme.primary)
-  root.style.setProperty('--accent-secondary',  theme.secondary)
+  const isDark = designApplyJkOSMode(theme.mode)
+  designApplyJkOSTheme({
+    mode:  theme.mode,
+    dark:  { primary: theme.primary, secondary: theme.secondary },
+    light: { primary: theme.primary, secondary: theme.secondary },
+  }, isDark)
 }
 
 export function useTheme() {

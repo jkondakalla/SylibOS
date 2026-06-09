@@ -2,8 +2,8 @@ import jwt from 'jsonwebtoken'
 
 export function jkosAuth(opts) {
   const { publicKey, issuer = 'jkos-auth' } = opts
-  if (!publicKey) throw new Error('jkosAuth: publicKey is required')
-  const key = publicKey.replace(/\\n/g, '\n')
+  const key = (publicKey || '').replace(/\\n/g, '\n')
+  if (!key.trim()) throw new Error('jkosAuth: publicKey is required')
 
   return function jkosAuthMiddleware(req, res, next) {
     const token = req.cookies?.jkos_token

@@ -11,7 +11,7 @@ interface FilmGrainProps {
 }
 
 export function FilmGrain({ strength }: FilmGrainProps) {
-  const isDark = document.documentElement.getAttribute('data-theme') !== 'light'
+  const isDark = document.documentElement.getAttribute('data-mode') === 'dark'
   const fallback = isDark ? 0.06 : 0.03
   const opacity = (strength ?? fallback) * (isDark ? 1 : 0.5)
   const blendMode = isDark ? 'screen' : 'multiply'
@@ -67,7 +67,7 @@ interface ScanLinesProps {
 }
 
 export function ScanLines({ strength = 1 }: ScanLinesProps) {
-  const isDark = document.documentElement.getAttribute('data-theme') !== 'light'
+  const isDark = document.documentElement.getAttribute('data-mode') === 'dark'
   const lineColor = isDark
     ? `rgba(255,255,255,${0.016 * strength})`
     : `rgba(0,0,0,${0.018 * strength})`

@@ -9,7 +9,7 @@
 **Containers (staging):** `staging-sylibos-frontend` + `staging-sylibos-api` on `nginx-staging-proxy`  
 **Ports:** Frontend :80, Backend :8004 (internal), exposed via nginx  
 **Tech:** React 19 · TypeScript · Vite · Zustand · Tailwind 4 · React Router + Node.js ESM · better-sqlite3 · node-cron  
-**Last updated:** 2026-06-04 (unified theme + effects system)
+**Last updated:** 2026-06-09
 
 > **On-disk directory:** `SylibOS/` — all Docker container names, networks, volume paths, and UI branding use `sylibos`.
 
@@ -143,7 +143,7 @@ While `status === 'loading'` or `status === 'unauthenticated'` (redirect in prog
 
 ### Design System (`src/lib/theme.ts` · `src/index.css` · `src/components/ui.tsx`)
 
-SylibOS uses a **reading-room aesthetic** — warm parchment tones in light mode, cool slate in dark. The system is driven by CSS custom properties on `<html data-theme>`:
+SylibOS uses a **reading-room aesthetic** — warm parchment tones in light mode, cool slate in dark. The system is driven by CSS custom properties on `<html data-mode>`:
 
 ```
 Light: --color-paper #fbfaf7, --color-accent var(--accent-base, #0e7c66)
@@ -152,9 +152,9 @@ Dark:  --color-paper #121318, --color-accent color-mix(in oklab, var(--accent-ba
 
 **`src/lib/theme.ts`** — two layers of theming:
 
-1. **Local schemes** — `applyScheme(id)` sets `data-theme` and `--accent-base` from a preset (`reading-room`, `sandstone`, `nocturne`, `velvet`). `useTheme()` reads `settings.scheme` from Zustand, exposes `setScheme` / `setTheme` / `toggle`. `index.html` applies the saved scheme before first paint to avoid flash.
+1. **Local schemes** — `applyScheme(id)` sets `data-mode` and `--accent-base` from a preset (`reading-room`, `sandstone`, `nocturne`, `velvet`). `useTheme()` reads `settings.scheme` from Zustand, exposes `setScheme` / `setTheme` / `toggle`. `index.html` applies the saved scheme before first paint to avoid flash.
 
-2. **jkOS suite theme** — `applyJkOSTheme(theme)` overrides accent from jkAuth cross-app preferences. Called in `authStore.ts` after profile load. Theme object (simplified): `{ mode: 'light'|'dark'|'system', primary: string, secondary: string }`. Sets `--accent-base` and `--accent-secondary` on `:root`; `data-theme` is set from the effective mode.
+2. **jkOS suite theme** — `applyJkOSTheme(theme)` overrides accent from jkAuth cross-app preferences. Called in `authStore.ts` after profile load. Theme object (simplified): `{ mode: 'light'|'dark'|'system', primary: string, secondary: string }`. Sets `--accent-base` and `--accent-secondary` on `:root`; `data-mode` is set from the effective mode.
 
 ### CRT Overlay Effects
 
